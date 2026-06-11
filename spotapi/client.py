@@ -82,34 +82,31 @@ class SpotifyClient:
         if auto_set:
             set_client(self)
 
-    def get_json(self, path, query=None):
+    def _get_json(self, path, query=None):
         token = self._access_token()
         if token is None:
             raise SpotifyClientError("An access_token is required for Spotify Web API requests")
 
         return get_json(path, access_token=token, query=query, transport=self.transport)
 
-    def put_json(self, path, data=None, query=None):
+    def _put_json(self, path, data=None, query=None):
         return self._request_json(put_json, path, data=data, query=query)
 
-    def put_body(self, path, body, content_type, query=None):
+    def _put_body(self, path, body, content_type, query=None):
         token = self._access_token()
         if token is None:
             raise SpotifyClientError("An access_token is required for Spotify Web API requests")
 
         return put_body(path, body, content_type, access_token=token, query=query, transport=self.transport)
 
-    def post_json(self, path, data=None, query=None):
+    def _post_json(self, path, data=None, query=None):
         return self._request_json(post_json, path, data=data, query=query)
 
-    def delete_json(self, path, data=None, query=None):
+    def _delete_json(self, path, data=None, query=None):
         return self._request_json(delete_json, path, data=data, query=query)
 
     def _url(self, path, query=None):
         return build_url(path, query=query, base_url=self.API_BASE_URL)
-
-    def _get_json(self, path, query=None):
-        return self.get_json(path, query=query)
 
     def _request_json(self, request, path, data=None, query=None):
         token = self._access_token()
@@ -137,16 +134,16 @@ class SpotifyClient:
     def _page(self, cls, path, query=None):
         return cls(self._get_json(path, query=query))
 
-    def page(self, page_url, page_class):
+    def _page_url(self, page_url, page_class):
         if page_url is None:
             return None
         return page_class(self._get_json(page_url))
 
     def next_page(self, page):
-        return self.page(page.next, page.__class__)
+        return self._page_url(page.next, page.__class__)
 
     def previous_page(self, page):
-        return self.page(page.previous, page.__class__)
+        return self._page_url(page.previous, page.__class__)
 
     def _path_id(self, value):
         return str(value)
@@ -204,14 +201,14 @@ class SpotifyClient:
         self._add_query(data, "public", public)
         self._add_query(data, "collaborative", collaborative)
         self._add_query(data, "description", description)
-        return Playlist(self.post_json("/users/" + self._path_id(user_id) + "/playlists", data=data))
+        return Playlist(self._post_json("/users/" + self._path_id(user_id) + "/playlists", data=data))
 
     def create_current_user_playlist(self, name, public=None, collaborative=None, description=None):
         data = {"name": name}
         self._add_query(data, "public", public)
         self._add_query(data, "collaborative", collaborative)
         self._add_query(data, "description", description)
-        return Playlist(self.post_json("/me/playlists", data=data))
+        return Playlist(self._post_json("/me/playlists", data=data))
 
     def update_playlist_details(self, object_id, name=None, public=None, collaborative=None, description=None):
         data = {}
@@ -219,7 +216,7 @@ class SpotifyClient:
         self._add_query(data, "public", public)
         self._add_query(data, "collaborative", collaborative)
         self._add_query(data, "description", description)
-        return self.put_json("/playlists/" + self._path_id(object_id), data=data)
+        return self._put_json("/playlists/" + self._path_id(object_id), data=data)
 
     def playlist_items(self, object_id, market=None, fields=None, limit=None, offset=None, additional_types=None):
         query = self._page_query(market=market, limit=limit, offset=offset)
@@ -236,30 +233,30 @@ class SpotifyClient:
     def add_playlist_items(self, object_id, uris, position=None):
         data = {"uris": self._uri_list(uris)}
         self._add_query(data, "position", position)
-        return self._snapshot(self.post_json("/playlists/" + self._path_id(object_id) + "/items", data=data))
+        return self._snapshot(self._post_json("/playlists/" + self._path_id(object_id) + "/items", data=data))
 
     def add_playlist_tracks(self, object_id, uris, position=None):
         data = {"uris": self._uri_list(uris)}
         self._add_query(data, "position", position)
-        return self._snapshot(self.post_json("/playlists/" + self._path_id(object_id) + "/tracks", data=data))
+        return self._snapshot(self._post_json("/playlists/" + self._path_id(object_id) + "/tracks", data=data))
 
     def remove_playlist_items(self, object_id, uris, snapshot_id=None):
         data = {
             "items": [{"uri": uri} for uri in self._uri_list(uris)],
         }
         self._add_query(data, "snapshot_id", snapshot_id)
-        return self._snapshot(self.delete_json("/playlists/" + self._path_id(object_id) + "/items", data=data))
+        return self._snapshot(self._delete_json("/playlists/" + self._path_id(object_id) + "/items", data=data))
 
     def remove_playlist_tracks(self, object_id, uris, snapshot_id=None):
         data = {
             "tracks": [{"uri": uri} for uri in self._uri_list(uris)],
         }
         self._add_query(data, "snapshot_id", snapshot_id)
-        return self._snapshot(self.delete_json("/playlists/" + self._path_id(object_id) + "/tracks", data=data))
+        return self._snapshot(self._delete_json("/playlists/" + self._path_id(object_id) + "/tracks", data=data))
 
     def replace_playlist_items(self, object_id, uris):
         return self._snapshot(
-            self.put_json(
+            self._put_json(
                 "/playlists/" + self._path_id(object_id) + "/items",
                 data={"uris": self._uri_list(uris)},
             )
@@ -267,7 +264,7 @@ class SpotifyClient:
 
     def replace_playlist_tracks(self, object_id, uris):
         return self._snapshot(
-            self.put_json(
+            self._put_json(
                 "/playlists/" + self._path_id(object_id) + "/tracks",
                 data={"uris": self._uri_list(uris)},
             )
@@ -280,7 +277,7 @@ class SpotifyClient:
         }
         self._add_query(data, "range_length", range_length)
         self._add_query(data, "snapshot_id", snapshot_id)
-        return self._snapshot(self.put_json("/playlists/" + self._path_id(object_id) + "/items", data=data))
+        return self._snapshot(self._put_json("/playlists/" + self._path_id(object_id) + "/items", data=data))
 
     def reorder_playlist_tracks(self, object_id, range_start, insert_before, range_length=None, snapshot_id=None):
         data = {
@@ -289,15 +286,15 @@ class SpotifyClient:
         }
         self._add_query(data, "range_length", range_length)
         self._add_query(data, "snapshot_id", snapshot_id)
-        return self._snapshot(self.put_json("/playlists/" + self._path_id(object_id) + "/tracks", data=data))
+        return self._snapshot(self._put_json("/playlists/" + self._path_id(object_id) + "/tracks", data=data))
 
     def follow_playlist(self, object_id, public=None):
         data = {}
         self._add_query(data, "public", public)
-        return self.put_json("/playlists/" + self._path_id(object_id) + "/followers", data=data)
+        return self._put_json("/playlists/" + self._path_id(object_id) + "/followers", data=data)
 
     def unfollow_playlist(self, object_id):
-        return self.delete_json("/playlists/" + self._path_id(object_id) + "/followers")
+        return self._delete_json("/playlists/" + self._path_id(object_id) + "/followers")
 
     def playlist_followers_contains(self, object_id, ids):
         return self._bools("/playlists/" + self._path_id(object_id) + "/followers/contains", ids)
@@ -418,7 +415,7 @@ class SpotifyClient:
     def transfer_playback(self, device_ids, play=None):
         data = {"device_ids": self._string_list(device_ids)}
         self._add_query(data, "play", play)
-        return self.put_json("/me/player", data=data)
+        return self._put_json("/me/player", data=data)
 
     def play(self, device_id=None, context_uri=None, uris=None, offset=None, position_ms=None):
         data = {}
@@ -427,41 +424,41 @@ class SpotifyClient:
             data["uris"] = self._uri_list(uris)
         self._add_query(data, "offset", offset)
         self._add_query(data, "position_ms", position_ms)
-        return self.put_json("/me/player/play", data=data, query=self._device_query(device_id))
+        return self._put_json("/me/player/play", data=data, query=self._device_query(device_id))
 
     def pause(self, device_id=None):
-        return self.put_json("/me/player/pause", query=self._device_query(device_id))
+        return self._put_json("/me/player/pause", query=self._device_query(device_id))
 
     def next_track(self, device_id=None):
-        return self.post_json("/me/player/next", query=self._device_query(device_id))
+        return self._post_json("/me/player/next", query=self._device_query(device_id))
 
     def previous_track(self, device_id=None):
-        return self.post_json("/me/player/previous", query=self._device_query(device_id))
+        return self._post_json("/me/player/previous", query=self._device_query(device_id))
 
     def seek(self, position_ms, device_id=None):
         query = {"position_ms": position_ms}
         self._add_query(query, "device_id", device_id)
-        return self.put_json("/me/player/seek", query=query)
+        return self._put_json("/me/player/seek", query=query)
 
     def repeat(self, state, device_id=None):
         query = {"state": state}
         self._add_query(query, "device_id", device_id)
-        return self.put_json("/me/player/repeat", query=query)
+        return self._put_json("/me/player/repeat", query=query)
 
     def shuffle(self, state, device_id=None):
         query = {"state": bool_string(state)}
         self._add_query(query, "device_id", device_id)
-        return self.put_json("/me/player/shuffle", query=query)
+        return self._put_json("/me/player/shuffle", query=query)
 
     def volume(self, volume_percent, device_id=None):
         query = {"volume_percent": volume_percent}
         self._add_query(query, "device_id", device_id)
-        return self.put_json("/me/player/volume", query=query)
+        return self._put_json("/me/player/volume", query=query)
 
     def add_to_queue(self, uri, device_id=None):
         query = {"uri": self._uri(uri)}
         self._add_query(query, "device_id", device_id)
-        return self.post_json("/me/player/queue", query=query)
+        return self._post_json("/me/player/queue", query=query)
 
     def devices(self):
         data = self._get_json("/me/player/devices")
@@ -551,10 +548,10 @@ class SpotifyClient:
         return tuple(bool(value) for value in self._get_json("/me/library/contains", query=self._query_with_uris(uris)))
 
     def save_library_items(self, uris):
-        return self.put_json("/me/library", query=self._query_with_uris(uris))
+        return self._put_json("/me/library", query=self._query_with_uris(uris))
 
     def remove_library_items(self, uris):
-        return self.delete_json("/me/library", query=self._query_with_uris(uris))
+        return self._delete_json("/me/library", query=self._query_with_uris(uris))
 
     def followed_artists(self, after=None, limit=None):
         query = {"type": "artist"}
@@ -596,7 +593,7 @@ class SpotifyClient:
         return [Image(item) for item in data]
 
     def set_playlist_cover_image(self, object_id, base64_jpeg):
-        return self.put_body(
+        return self._put_body(
             "/playlists/" + self._path_id(object_id) + "/images",
             base64_jpeg,
             "image/jpeg",
@@ -657,16 +654,16 @@ class SpotifyClient:
         return self._bools("/me/following/contains", ids, query=query)
 
     def _put_ids(self, path, ids):
-        return self.put_json(path, data={"ids": self._id_list(ids)})
+        return self._put_json(path, data={"ids": self._id_list(ids)})
 
     def _delete_ids(self, path, ids):
-        return self.delete_json(path, data={"ids": self._id_list(ids)})
+        return self._delete_json(path, data={"ids": self._id_list(ids)})
 
     def _follow(self, item_type, ids):
-        return self.put_json("/me/following", data={"ids": self._id_list(ids)}, query={"type": item_type})
+        return self._put_json("/me/following", data={"ids": self._id_list(ids)}, query={"type": item_type})
 
     def _unfollow(self, item_type, ids):
-        return self.delete_json("/me/following", data={"ids": self._id_list(ids)}, query={"type": item_type})
+        return self._delete_json("/me/following", data={"ids": self._id_list(ids)}, query={"type": item_type})
 
     def _snapshot(self, data):
         if data is None:
