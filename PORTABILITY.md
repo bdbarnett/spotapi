@@ -72,6 +72,8 @@ embedded runtimes:
 - `scripts/`
 - `tests/`
 - examples that load `spotapi.local.json` or call `SpotifyClient()` with no args
+- `examples/refresh_token_playback_controls.py` (raw terminal keyboard input)
+- examples that load `examples/write_examples.json`
 
 Portable applications can still use the core client, auth, transport, and object
 layers without the local config file or interactive OAuth helpers.

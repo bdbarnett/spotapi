@@ -9,7 +9,7 @@ The current focus is a lightweight object layer:
 - Spec-driven class creation
 - Generic page navigation helpers
 - Manual bearer token, Client Credentials auth, and Authorization Code auth helpers
-- Local config file for credentials and example settings
+- Local config files for app credentials and optional write-example settings
 - `SpotifyClient()` loads config and runs browser OAuth on first use when needed
 - Transport functions isolated in `spotapi.transport`
 
@@ -45,8 +45,9 @@ python scripts\configure.py
 
 Local files are ignored by Git:
 
-- `spotapi.local.json` — app credentials and example settings
+- `spotapi.local.json` — app credentials
 - `tokens.json` — saved OAuth access/refresh tokens after browser login
+- `examples/write_examples.json` — settings for write examples (optional)
 
 ## Quick Start
 
@@ -57,7 +58,11 @@ client = SpotifyClient()
 user = client.me()
 
 print(user.display_name)
+print(user)
 ```
+
+`print()` on a Spotify object shows its raw data as formatted JSON. The REPL
+still uses the compact `repr`, for example `<PrivateUser id='...'>`.
 
 With `spotapi.local.json` in place, `SpotifyClient()` loads your app
 credentials, reuses `tokens.json` when available, and runs PKCE browser login on
@@ -94,7 +99,10 @@ python scripts\smoke_oauth.py
 
 ## Examples
 
-Run examples from the project root:
+Run examples from the project root. Most call `SpotifyClient()` and
+authenticate automatically when needed.
+
+### Read Examples
 
 ```powershell
 python examples\client_credentials_track.py
@@ -110,13 +118,31 @@ python examples\refresh_token_top_tracks.py
 python examples\refresh_token_playlists.py
 python examples\refresh_token_saved_albums.py
 python examples\refresh_token_saved_tracks.py
+python examples\refresh_token_no_arg_methods.py
 ```
 
-Examples call `SpotifyClient()` and authenticate automatically when needed.
+`refresh_token_no_arg_methods.py` calls every parameterless read method on
+`SpotifyClient` and prints each return value.
 
 `custom_transport.py` shows how CPython `requests`, MicroPython `urequests`, or
 CircuitPython `adafruit_requests`-style modules can be adapted while still
 reading credentials from `spotapi.local.json`.
+
+### Playback Controls
+
+`refresh_token_playback_controls.py` is an interactive terminal demo. It prints
+a key map, then loops on single keystrokes to call playback methods such as
+`play()`, `pause()`, `next_track()`, `seek()`, `volume()`, and `queue()`. Press
+`Q` to exit. Requires Premium and an active Spotify device. Uses raw terminal
+input (`termios`) and is intended for Linux/WSL/macOS terminals.
+
+```powershell
+python examples\refresh_token_playback_controls.py
+```
+
+Many API paths use descriptive method names rather than URL paths. For example,
+`GET /me/tracks` is `saved_tracks()`, not `me_tracks()`. See
+[Endpoint Coverage](#endpoint-coverage) to look up path-to-method mappings.
 
 ### Write Examples
 
@@ -242,8 +268,10 @@ The client currently includes object-returning methods for:
 - Write helpers accept strings or Spotify objects with matching `id`/`uri` fields where appropriate
 - Generic `next_page(page)` and `previous_page(page)` navigation for Spotify paging URLs
 - First-class methods for all OpenAPI paths currently reported by Spotify's schema
+- Low-level HTTP helpers on `SpotifyClient` are private; the public surface is endpoint methods such as `track()`, `pause()`, and `saved_tracks()`
 
 Some playback and user methods require a user access token from Authorization Code flow.
+Some playback controls require Spotify Premium and an active device.
 
 ## Current Limitations
 

@@ -8,25 +8,27 @@ transport helpers, read methods, selected write methods, examples, and live test
 - Spec-driven Spotify object classes from `SPOTIFY_OBJECT_SPECS`
 - Nested object wrapping for object, object list, typed object, and page fields
 - Lazy hydration from simplified objects to full objects
+- `SpotifyObject.__str__()` pretty-prints raw object data for `print()`
 - Client Credentials auth
-- Authorization Code auth helpers
+- Authorization Code auth helpers consolidated in `spotapi.auth`
 - PKCE verifier/challenge helpers
 - `TokenCache` for access/refresh token persistence
-- `spotapi.local.json` config file for credentials and example settings
+- `spotapi.local.json` config file for app credentials
+- `examples/write_examples.json` for optional write-example settings
 - `SpotifyClient()` config-file bootstrap from `spotapi.local.json`
 - Automatic browser OAuth on first `SpotifyClient()` call when needed
 - OAuth error translation into `SpotifyAuthError`
 - CPython interactive OAuth flow in `spotapi.auth`
 - Manual callback URL parsing and lower-level OAuth examples
 - CPython `urllib` transport plus custom transport hooks
-- JSON and raw-body write transports
+- JSON and raw-body write transports; non-JSON 2xx responses treated as success
 - Read methods for major Spotify object families, paging, search, playback, library, and user endpoints
 - Write methods for saved-library items, follows, playlists, and playback controls
 - `SnapshotResult` for playlist mutation responses
 - Draft schema-to-object-spec generator script
-- Endpoint coverage report script
+- Endpoint coverage report that parses `spotapi/client.py` and compares it to OpenAPI (`--map` prints path-to-method names)
 - First-class client methods for all OpenAPI paths currently reported by Spotify's schema
-- Example scripts for client credentials, OAuth, user-library usage, and guarded write calls
+- Example scripts for client credentials, OAuth, user-library usage, playback controls, and guarded write calls
 - Live integration tests against the Spotify Web API
 
 ## Good Next Steps
