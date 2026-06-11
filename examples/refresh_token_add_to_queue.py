@@ -1,18 +1,20 @@
-import os
+from _bootstrap import bootstrap
 
-from _local_oauth import refresh_token_client
+bootstrap()
+
+from spotapi import user_client
+from spotapi.config import config_value, load_config, require_write_examples
 
 
-TRACK_URI = "spotify:track:11dFghVXANMlKmJXsNCbNl"
+DEFAULT_TRACK_URI = "spotify:track:11dFghVXANMlKmJXsNCbNl"
 
 
 def main():
-    if os.environ.get("SPOTIFY_RUN_WRITE_EXAMPLE") != "1":
-        raise SystemExit("Set SPOTIFY_RUN_WRITE_EXAMPLE=1 to add a track to your queue")
+    require_write_examples()
+    config = load_config()
+    uri = config_value(config, "track_uri", DEFAULT_TRACK_URI)
 
-    uri = os.environ.get("SPOTIFY_TRACK_URI", TRACK_URI)
-
-    client = refresh_token_client()
+    client = user_client()
     client.add_to_queue(uri)
 
     print("queued:", uri)

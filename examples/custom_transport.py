@@ -1,10 +1,8 @@
-import os
-
 from _bootstrap import bootstrap
 
 bootstrap()
 
-from spotapi import SpotifyClient
+from spotapi import SpotifyClient, credentials_from_config, load_config
 
 
 class RequestsTransport:
@@ -24,12 +22,8 @@ def main():
     except ImportError:
         raise SystemExit("Install requests or pass a transport for your runtime")
 
-    client_id = os.environ.get("SPOTIFY_CLIENT_ID")
-    client_secret = os.environ.get("SPOTIFY_CLIENT_SECRET")
-
-    if not client_id or not client_secret:
-        raise SystemExit("Set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET")
-
+    config = load_config()
+    client_id, client_secret = credentials_from_config(config)
     transport = RequestsTransport(requests)
     client = SpotifyClient(client_id=client_id, client_secret=client_secret, transport=transport)
     markets = client.available_markets()

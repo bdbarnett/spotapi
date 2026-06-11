@@ -1,20 +1,26 @@
-import os
+from _bootstrap import bootstrap
 
-from _local_oauth import refresh_token_client
+bootstrap()
+
+from spotapi import user_client
+from spotapi.config import config_value, load_config, require_write_examples
 
 
 def main():
-    if os.environ.get("SPOTIFY_RUN_WRITE_EXAMPLE") != "1":
-        raise SystemExit("Set SPOTIFY_RUN_WRITE_EXAMPLE=1 to create a playlist")
-
-    user_id = os.environ.get("SPOTIFY_USER_ID")
+    require_write_examples()
+    config = load_config()
+    user_id = config_value(config, "user_id")
     if not user_id:
-        raise SystemExit("Set SPOTIFY_USER_ID")
+        raise SystemExit("Set user_id in spotapi.local.json")
 
-    name = os.environ.get("SPOTIFY_PLAYLIST_NAME", "spotapi example playlist")
-    description = os.environ.get("SPOTIFY_PLAYLIST_DESCRIPTION", "Created by spotapi example code")
+    name = config_value(config, "playlist_name", "spotapi example playlist")
+    description = config_value(
+        config,
+        "playlist_description",
+        "Created by spotapi example code",
+    )
 
-    client = refresh_token_client()
+    client = user_client()
     playlist = client.create_playlist(user_id, name, public=False, description=description)
 
     print("playlist:", playlist.name)

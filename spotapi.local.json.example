@@ -1,0 +1,12 @@
+{
+  "client_id": "your-client-id",
+  "client_secret": "your-client-secret",
+  "redirect_uri": "http://127.0.0.1:8080",
+  "allow_write_examples": false,
+  "playlist_id": null,
+  "user_id": null,
+  "playlist_name": "spotapi example playlist",
+  "playlist_description": "Created by spotapi example code",
+  "playlist_cover_jpeg": null,
+  "track_uri": "spotify:track:11dFghVXANMlKmJXsNCbNl"
+}

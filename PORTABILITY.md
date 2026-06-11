@@ -12,6 +12,8 @@ CPython, MicroPython, and CircuitPython when the runtime has enough memory:
 - `spotapi.object_specs`
 - `spotapi.client`
 - `spotapi.scopes`
+- `spotapi.auth`
+- `spotapi.token_cache`
 
 The client delegates all HTTP behavior to `spotapi.transport`.
 
@@ -43,19 +45,39 @@ Basic auth helpers import optional modules inside helper functions:
 If a runtime does not provide one of those modules, the relevant helper raises
 `SpotifyAuthError`.
 
-## Token Cache
+## Config And Token Files
 
-`spotapi.token_cache` is optional. It uses `json` and local file I/O only when
-`load()` or `save()` is called. Applications on constrained devices can skip it
-or provide their own cache object with `load_auth(auth)` and `save_auth(auth)`.
+`spotapi.config` reads and writes `spotapi.local.json` using `json` and local
+file I/O. It is intended for CPython development workflows, examples, scripts,
+and live tests.
+
+`spotapi.token_cache` stores OAuth tokens separately in `tokens.json` by default.
+Both modules only touch the filesystem when their load/save helpers are called.
+
+On constrained devices, skip these helpers and construct `AuthorizationCodeAuth`
+or `SpotifyClient` directly with in-memory tokens.
+
+## Interactive OAuth
+
+`spotapi.oauth_flow` provides the CPython browser login flow used by
+`user_client()`. It depends on:
+
+- `http.server` for the localhost callback
+- `webbrowser` to open the authorize URL
+
+MicroPython and CircuitPython runtimes should perform OAuth out of band and pass
+resulting tokens into `AuthorizationCodeAuth` manually.
 
 ## CPython-Only Project Files
 
-The following areas are development or desktop examples and are not part of the
+The following areas are development or desktop workflows and are not part of the
 portable core:
 
 - `scripts/`
 - `tests/`
-- local OAuth server examples using `http.server` and `webbrowser`
-- examples that read environment variables with `os.environ`
+- `spotapi.oauth_flow`
+- `spotapi.config`
+- examples that load `spotapi.local.json` or call `user_client()`
 
+Portable applications can still use the core client, auth, transport, and object
+layers without the config or interactive OAuth helpers.

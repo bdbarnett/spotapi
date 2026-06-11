@@ -1,7 +1,7 @@
 # spotapi Roadmap
 
 This project currently has a lightweight Spotify Web API object layer, auth helpers,
-transport helpers, read methods, selected write methods, examples, and tests.
+transport helpers, read methods, selected write methods, examples, and live tests.
 
 ## Implemented
 
@@ -11,8 +11,13 @@ transport helpers, read methods, selected write methods, examples, and tests.
 - Client Credentials auth
 - Authorization Code auth helpers
 - PKCE verifier/challenge helpers
-- `TokenCache` for optional access/refresh token persistence
-- Manual callback URL parsing and CPython local callback examples
+- `TokenCache` for access/refresh token persistence
+- `spotapi.local.json` config file for credentials and example settings
+- `app_client()` and `user_client()` helpers built on the config file
+- Automatic browser OAuth on first `user_client()` call
+- OAuth error translation into `SpotifyAuthError`
+- CPython interactive OAuth flow in `spotapi.oauth_flow`
+- Manual callback URL parsing and lower-level OAuth examples
 - CPython `urllib` transport plus custom transport hooks
 - JSON and raw-body write transports
 - Read methods for major Spotify object families, paging, search, playback, library, and user endpoints
@@ -21,19 +26,20 @@ transport helpers, read methods, selected write methods, examples, and tests.
 - Draft schema-to-object-spec generator script
 - Endpoint coverage report script
 - First-class client methods for all OpenAPI paths currently reported by Spotify's schema
-- Example scripts for client credentials, OAuth, refresh-token usage, and guarded write calls
-- Schema coverage tests and endpoint behavior tests
+- Example scripts for client credentials, OAuth, user-library usage, and guarded write calls
+- Live integration tests against the Spotify Web API
 
 ## Good Next Steps
 
-- Add more guarded examples for playback and playlist mutations if they become useful again.
-- Run live OAuth smoke tests with a test Spotify account.
+- Add more live tests for read-only user endpoints such as playlists and saved tracks.
 - Review MicroPython and CircuitPython compatibility on-device or in their runtimes.
 - Improve the schema generator's heuristics for fetch flags and hand-curated field overrides.
 - Decide whether to package examples, keep them source-only, or move them to docs.
+- Retry API requests after token refresh when Spotify returns 401.
 
 ## Open Design Questions
 
 - Should `SpotifyClient` stay a singleton-by-default, or should object instances optionally carry a client later?
 - Are there additional non-playlist mutation response shapes worth modeling?
 - Should write methods validate Spotify limits such as max IDs per request, or leave that to API errors?
+- Should config and token files support a configurable base directory for multi-project setups?

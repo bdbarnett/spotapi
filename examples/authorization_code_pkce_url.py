@@ -1,23 +1,19 @@
-import os
+from _bootstrap import bootstrap
 
-from _local_oauth import example_scopes
-from spotapi import AuthorizationCodeAuth, generate_code_verifier
+bootstrap()
+
+from spotapi import AuthorizationCodeAuth, credentials_from_config, generate_code_verifier, load_config, redirect_uri_from_config, scopes_from_config
 
 
 def main():
-    client_id = os.environ.get("SPOTIFY_CLIENT_ID")
-    client_secret = os.environ.get("SPOTIFY_CLIENT_SECRET")
-    redirect_uri = os.environ.get("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8080")
-
-    if not client_id or not client_secret:
-        raise SystemExit("Set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET")
-
+    config = load_config()
+    client_id, client_secret = credentials_from_config(config)
     code_verifier = generate_code_verifier()
     auth = AuthorizationCodeAuth(
         client_id,
         client_secret,
-        redirect_uri,
-        scope=example_scopes(),
+        redirect_uri_from_config(config),
+        scope=scopes_from_config(config),
         code_verifier=code_verifier,
     )
 

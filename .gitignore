@@ -3,6 +3,7 @@ __pycache__/
 *.pyo
 
 .env
+spotapi.local.json
 tokens.json
 generated_object_specs.py
 spotapi/generated_object_specs.py

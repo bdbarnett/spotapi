@@ -1,19 +1,16 @@
-from _local_oauth import refresh_token_client
+from _bootstrap import bootstrap
+
+bootstrap()
+
+from spotapi import user_client
 
 
 def main():
-    client = refresh_token_client()
-    page = client.top_artists(time_range="short_term", limit=10)
+    client = user_client()
+    page = client.top_artists(limit=5)
 
-    if not page.items:
-        print("No top artists.")
-        return
-
-    for index, artist in enumerate(page, 1):
-        print(str(index) + ".", artist.name)
-        if artist.genres:
-            print("   genres:", ", ".join(artist.genres))
-        print("   popularity:", artist.popularity)
+    for artist in page:
+        print("-", artist.name)
 
 
 if __name__ == "__main__":

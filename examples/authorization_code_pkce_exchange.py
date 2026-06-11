@@ -1,28 +1,28 @@
-import os
-
 from _bootstrap import bootstrap
 
 bootstrap()
 
-from spotapi import AuthorizationCodeAuth
+from spotapi import AuthorizationCodeAuth, credentials_from_config, load_config, redirect_uri_from_config
 
 
 def main():
-    client_id = os.environ.get("SPOTIFY_CLIENT_ID")
-    client_secret = os.environ.get("SPOTIFY_CLIENT_SECRET")
-    redirect_uri = os.environ.get("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8080")
-    callback_url = os.environ.get("SPOTIFY_CALLBACK_URL")
-    code_verifier = os.environ.get("SPOTIFY_CODE_VERIFIER")
-    expected_state = os.environ.get("SPOTIFY_AUTH_STATE")
+    config = load_config()
+    callback_url = config.get("callback_url")
+    code_verifier = config.get("code_verifier")
+    expected_state = config.get("auth_state")
 
-    if not client_id or not client_secret:
-        raise SystemExit("Set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET")
     if not callback_url:
-        raise SystemExit("Set SPOTIFY_CALLBACK_URL to the full URL Spotify redirected to")
+        raise SystemExit("Set callback_url in spotapi.local.json to the full URL Spotify redirected to")
     if not code_verifier:
-        raise SystemExit("Set SPOTIFY_CODE_VERIFIER from authorization_code_pkce_url.py")
+        raise SystemExit("Set code_verifier in spotapi.local.json from authorization_code_pkce_url.py")
 
-    auth = AuthorizationCodeAuth(client_id, client_secret, redirect_uri, code_verifier=code_verifier)
+    client_id, client_secret = credentials_from_config(config)
+    auth = AuthorizationCodeAuth(
+        client_id,
+        client_secret,
+        redirect_uri_from_config(config),
+        code_verifier=code_verifier,
+    )
     access_token = auth.exchange_callback_url(callback_url, expected_state=expected_state)
 
     print("access_token:", access_token)

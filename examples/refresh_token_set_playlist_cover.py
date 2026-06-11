@@ -1,25 +1,28 @@
 import base64
-import os
 
-from _local_oauth import refresh_token_client
+from _bootstrap import bootstrap
+
+bootstrap()
+
+from spotapi import user_client
+from spotapi.config import config_value, load_config, require_write_examples
 
 
 def main():
-    if os.environ.get("SPOTIFY_RUN_WRITE_EXAMPLE") != "1":
-        raise SystemExit("Set SPOTIFY_RUN_WRITE_EXAMPLE=1 to upload a playlist cover image")
-
-    playlist_id = os.environ.get("SPOTIFY_PLAYLIST_ID")
-    image_path = os.environ.get("SPOTIFY_PLAYLIST_COVER_JPEG")
+    require_write_examples()
+    config = load_config()
+    playlist_id = config_value(config, "playlist_id")
+    image_path = config_value(config, "playlist_cover_jpeg")
 
     if not playlist_id:
-        raise SystemExit("Set SPOTIFY_PLAYLIST_ID")
+        raise SystemExit("Set playlist_id in spotapi.local.json")
     if not image_path:
-        raise SystemExit("Set SPOTIFY_PLAYLIST_COVER_JPEG")
+        raise SystemExit("Set playlist_cover_jpeg in spotapi.local.json")
 
     with open(image_path, "rb") as file:
         base64_jpeg = base64.b64encode(file.read()).decode("ascii")
 
-    client = refresh_token_client()
+    client = user_client()
     client.set_playlist_cover_image(playlist_id, base64_jpeg)
 
     print("uploaded:", image_path)

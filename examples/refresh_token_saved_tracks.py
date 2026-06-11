@@ -1,8 +1,12 @@
-from _local_oauth import refresh_token_client
+from _bootstrap import bootstrap
+
+bootstrap()
+
+from spotapi import user_client
 
 
 def main():
-    client = refresh_token_client()
+    client = user_client()
     page = client.saved_tracks(market="US", limit=5)
 
     print_tracks(page)

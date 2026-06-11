@@ -9,13 +9,76 @@ The current focus is a lightweight object layer:
 - Spec-driven class creation
 - Generic page navigation helpers
 - Manual bearer token, Client Credentials auth, and Authorization Code auth helpers
+- Local config file for credentials and example settings
+- `user_client()` helper with automatic browser OAuth on first use
 - Transport functions isolated in `spotapi.transport`
 
 OAuth Authorization Code helpers include URL generation, callback parsing,
-token exchange, refresh handling, PKCE helpers, and CPython local callback
-examples.
+token exchange, refresh handling, PKCE helpers, and CPython interactive login
+through `spotapi.oauth_flow`.
+
+## Setup
+
+Copy the example config and add your Spotify app credentials:
+
+```powershell
+copy spotapi.local.json.example spotapi.local.json
+```
+
+Edit `spotapi.local.json`:
+
+```json
+{
+  "client_id": "your-client-id",
+  "client_secret": "your-client-secret",
+  "redirect_uri": "http://127.0.0.1:8080"
+}
+```
+
+Register the same `redirect_uri` in your Spotify app dashboard.
+
+Or run the interactive setup script:
+
+```powershell
+python scripts\configure.py
+```
+
+Local files are ignored by Git:
+
+- `spotapi.local.json` — app credentials and example settings
+- `tokens.json` — saved OAuth access/refresh tokens after browser login
 
 ## Quick Start
+
+App-authenticated request:
+
+```python
+from spotapi import app_client
+
+client = app_client()
+track = client.track("11dFghVXANMlKmJXsNCbNl", market="US")
+
+print(track.name)
+print(track.album.name)
+print(track.artists[0].name)
+```
+
+User-authenticated request:
+
+```python
+from spotapi import user_client
+
+client = user_client()
+user = client.me()
+
+print(user.display_name)
+```
+
+On the first call, `user_client()` opens a browser window, runs PKCE OAuth on
+`http://127.0.0.1:8080`, saves tokens to `tokens.json`, and then continues.
+Later calls refresh the saved token automatically.
+
+You can also construct clients manually:
 
 ```python
 from spotapi import SpotifyClient
@@ -24,38 +87,28 @@ client = SpotifyClient(
     client_id="your-client-id",
     client_secret="your-client-secret",
 )
-
-track = client.track("11dFghVXANMlKmJXsNCbNl", market="US")
-
-print(track.name)
-print(track.album.name)
-print(track.artists[0].name)
 ```
 
-## Smoke Test
+## Smoke Tests
 
-Set credentials in the environment, then run:
+After creating `spotapi.local.json`:
 
 ```powershell
-$env:SPOTIFY_CLIENT_ID = "your-client-id"
-$env:SPOTIFY_CLIENT_SECRET = "your-client-secret"
 python scripts\smoke_client_credentials.py
+python scripts\smoke_oauth.py
 ```
 
-Expected output includes a track, album, and artist name.
+`smoke_client_credentials.py` fetches a public track with Client Credentials.
+`smoke_oauth.py` refreshes or acquires a user token, then calls `/me`.
 
 ## Examples
+
+Run examples from the project root:
 
 ```powershell
 python examples\client_credentials_track.py
 python examples\page_navigation.py
 python examples\custom_transport.py
-python examples\authorization_code_url.py
-python examples\authorization_code_exchange.py
-python examples\authorization_code_pkce_url.py
-python examples\authorization_code_pkce_exchange.py
-python examples\authorization_code_local_server.py
-python examples\authorization_code_pkce_local_server.py
 python examples\refresh_token_user_profile.py
 python examples\refresh_token_currently_playing.py
 python examples\refresh_token_devices.py
@@ -66,6 +119,31 @@ python examples\refresh_token_top_tracks.py
 python examples\refresh_token_playlists.py
 python examples\refresh_token_saved_albums.py
 python examples\refresh_token_saved_tracks.py
+```
+
+User examples call `user_client()` and authenticate automatically when needed.
+App examples call `app_client()`.
+
+`custom_transport.py` shows how CPython `requests`, MicroPython `urequests`, or
+CircuitPython `adafruit_requests`-style modules can be adapted while still
+reading credentials from `spotapi.local.json`.
+
+### Write Examples
+
+Write examples are disabled by default. Enable them in `spotapi.local.json`:
+
+```json
+{
+  "allow_write_examples": true,
+  "playlist_id": "your-playlist-id",
+  "user_id": "your-spotify-user-id",
+  "playlist_cover_jpeg": "C:\\path\\to\\cover.jpg"
+}
+```
+
+Then run:
+
+```powershell
 python examples\refresh_token_add_to_queue.py
 python examples\refresh_token_create_playlist.py
 python examples\refresh_token_add_playlist_track.py
@@ -73,51 +151,49 @@ python examples\refresh_token_set_playlist_cover.py
 python examples\refresh_token_save_track.py
 ```
 
-The examples read `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` from the environment.
-`custom_transport.py` shows how CPython `requests`, MicroPython `urequests`, or
-CircuitPython `adafruit_requests`-style modules can be adapted.
+Optional config fields also include `playlist_name`, `playlist_description`,
+`track_uri`, and `scopes`.
 
-For Authorization Code auth, run `authorization_code_url.py`, open the printed URL,
-then set `SPOTIFY_CALLBACK_URL` to the full redirect URL before running
-`authorization_code_exchange.py`. The exchange example prints tokens to the terminal
-and does not save them.
+### Manual OAuth Examples
 
-The auth URL examples use `EXAMPLE_SCOPES`, which includes the read and guarded
-write scopes used by the examples. Set `SPOTIFY_SCOPES` to a space-separated
-scope list to request narrower permissions.
+These examples demonstrate lower-level OAuth steps using values from
+`spotapi.local.json`:
 
-After you have a refresh token, set `SPOTIFY_REFRESH_TOKEN` and run
-`refresh_token_user_profile.py` to make a user-authenticated API request.
+```powershell
+python examples\authorization_code_url.py
+python examples\authorization_code_exchange.py
+python examples\authorization_code_pkce_url.py
+python examples\authorization_code_pkce_exchange.py
+python examples\authorization_code_local_server.py
+python examples\authorization_code_pkce_local_server.py
+```
 
-For PKCE, run `authorization_code_pkce_url.py`, keep the printed
-`code_verifier`, then set `SPOTIFY_CODE_VERIFIER` before running
-`authorization_code_pkce_exchange.py`.
+For the manual exchange examples, add temporary fields to
+`spotapi.local.json`:
 
-On CPython, `authorization_code_local_server.py` starts a one-request localhost
-callback server on `http://127.0.0.1:8080` and exchanges the code for
-tokens automatically. `authorization_code_pkce_local_server.py` does the same
-with a PKCE verifier and S256 challenge.
+```json
+{
+  "callback_url": "http://127.0.0.1:8080/?code=...&state=...",
+  "code_verifier": "...",
+  "auth_state": "spotapi-pkce-example"
+}
+```
 
-The local-server examples save token data to `tokens.json`, which is ignored
-by Git. `refresh_token_user_profile.py` reads `SPOTIFY_REFRESH_TOKEN` first, then
-falls back to `tokens.json`; `refresh_token_saved_tracks.py` does the same and
-demonstrates user-library paging. `refresh_token_playlists.py` lists your
-playlists and track totals.
+For most use, prefer `user_client()` instead of the manual OAuth flow.
 
-Library code can use `TokenCache("tokens.json")` with `AuthorizationCodeAuth`
-to load and save access/refresh token data.
-
-`refresh_token_save_track.py` mutates your library, so it only runs when
-`SPOTIFY_RUN_WRITE_EXAMPLE=1` is set. `refresh_token_add_playlist_track.py`
-also requires `SPOTIFY_PLAYLIST_ID`; `refresh_token_create_playlist.py`
-requires `SPOTIFY_USER_ID`. `refresh_token_set_playlist_cover.py` requires
-`SPOTIFY_PLAYLIST_ID` and `SPOTIFY_PLAYLIST_COVER_JPEG`.
+Library code can also use `TokenCache("tokens.json")` with
+`AuthorizationCodeAuth` to load and save access/refresh token data directly.
 
 ## Tests
 
+Tests are live integration tests against the Spotify Web API. Create
+`spotapi.local.json` first, then run:
+
 ```powershell
-python -m unittest discover -s tests
+python -m unittest discover -s tests -v
 ```
+
+If the config file is missing, the tests are skipped.
 
 ## Packaging
 
@@ -129,7 +205,7 @@ python -m build
 
 The wheel contains only the `spotapi` runtime package. The source distribution
 also includes examples, scripts, tests, and project notes. Generated draft specs
-and local token files are excluded.
+and local config/token files are excluded.
 
 ## Schema Draft Generation
 
@@ -176,7 +252,7 @@ Some playback and user methods require a user access token from Authorization Co
 
 ## Current Limitations
 
-- OAuth Authorization Code has URL, code-exchange, refresh-token helpers, and a CPython local callback example.
+- Interactive browser OAuth uses CPython `http.server` and `webbrowser`.
 - User-specific endpoints need a user access token; Client Credentials is not enough.
 - The default HTTP transport uses CPython `urllib`.
 - MicroPython/CircuitPython users should pass a compatible custom transport.
