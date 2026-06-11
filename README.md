@@ -213,13 +213,17 @@ OpenAPI schemas work with the standard library.
 
 ## Endpoint Coverage
 
-Compare `SpotifyClient` endpoint coverage to Spotify's OpenAPI paths with:
+Compare `SpotifyClient` to Spotify's OpenAPI paths by parsing `spotapi/client.py`:
 
 ```powershell
 python scripts\endpoint_coverage.py
+python scripts\endpoint_coverage.py --map
 ```
 
-The report lists covered endpoints and the currently missing API paths.
+The report lists endpoints missing from the client, client-only paths, and (with
+`--map`) each OpenAPI path with the matching `SpotifyClient` method names. For
+example, `GET /me/tracks` maps to `saved_tracks()`, not a method named after
+the URL path.
 
 ## Implemented Client Areas
 

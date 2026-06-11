@@ -1,4 +1,6 @@
 import argparse
+import ast
+import os
 
 try:
     from generate_object_specs import DEFAULT_SCHEMA_URL, load_schema
@@ -6,148 +8,274 @@ except ImportError:
     from scripts.generate_object_specs import DEFAULT_SCHEMA_URL, load_schema
 
 
-IMPLEMENTED_ENDPOINTS = (
-    ("DELETE", "/me/albums"),
-    ("DELETE", "/me/audiobooks"),
-    ("DELETE", "/me/episodes"),
-    ("DELETE", "/me/following"),
-    ("DELETE", "/me/library"),
-    ("DELETE", "/me/shows"),
-    ("DELETE", "/me/tracks"),
-    ("DELETE", "/playlists/{playlist_id}/followers"),
-    ("DELETE", "/playlists/{playlist_id}/items"),
-    ("DELETE", "/playlists/{playlist_id}/tracks"),
-    ("GET", "/albums"),
-    ("GET", "/albums/{id}"),
-    ("GET", "/albums/{id}/tracks"),
-    ("GET", "/artists"),
-    ("GET", "/artists/{id}"),
-    ("GET", "/artists/{id}/albums"),
-    ("GET", "/artists/{id}/related-artists"),
-    ("GET", "/artists/{id}/top-tracks"),
-    ("GET", "/audio-analysis/{id}"),
-    ("GET", "/audio-features"),
-    ("GET", "/audio-features/{id}"),
-    ("GET", "/audiobooks"),
-    ("GET", "/audiobooks/{id}"),
-    ("GET", "/audiobooks/{id}/chapters"),
-    ("GET", "/browse/categories"),
-    ("GET", "/browse/categories/{category_id}"),
-    ("GET", "/browse/categories/{category_id}/playlists"),
-    ("GET", "/browse/featured-playlists"),
-    ("GET", "/browse/new-releases"),
-    ("GET", "/chapters"),
-    ("GET", "/chapters/{id}"),
-    ("GET", "/episodes"),
-    ("GET", "/episodes/{id}"),
-    ("GET", "/markets"),
-    ("GET", "/me"),
-    ("GET", "/me/albums"),
-    ("GET", "/me/albums/contains"),
-    ("GET", "/me/audiobooks"),
-    ("GET", "/me/audiobooks/contains"),
-    ("GET", "/me/episodes"),
-    ("GET", "/me/episodes/contains"),
-    ("GET", "/me/following"),
-    ("GET", "/me/following/contains"),
-    ("GET", "/me/library/contains"),
-    ("GET", "/me/player"),
-    ("GET", "/me/player/currently-playing"),
-    ("GET", "/me/player/devices"),
-    ("GET", "/me/player/queue"),
-    ("GET", "/me/player/recently-played"),
-    ("GET", "/me/playlists"),
-    ("GET", "/me/shows"),
-    ("GET", "/me/shows/contains"),
-    ("GET", "/me/top/{type}"),
-    ("GET", "/me/tracks"),
-    ("GET", "/me/tracks/contains"),
-    ("GET", "/playlists/{playlist_id}"),
-    ("GET", "/playlists/{playlist_id}/followers/contains"),
-    ("GET", "/playlists/{playlist_id}/images"),
-    ("GET", "/playlists/{playlist_id}/items"),
-    ("GET", "/playlists/{playlist_id}/tracks"),
-    ("GET", "/recommendations"),
-    ("GET", "/recommendations/available-genre-seeds"),
-    ("GET", "/search"),
-    ("GET", "/shows"),
-    ("GET", "/shows/{id}"),
-    ("GET", "/shows/{id}/episodes"),
-    ("GET", "/tracks"),
-    ("GET", "/tracks/{id}"),
-    ("GET", "/users/{user_id}"),
-    ("GET", "/users/{user_id}/playlists"),
-    ("POST", "/me/player/next"),
-    ("POST", "/me/player/previous"),
-    ("POST", "/me/player/queue"),
-    ("POST", "/me/playlists"),
-    ("POST", "/playlists/{playlist_id}/items"),
-    ("POST", "/playlists/{playlist_id}/tracks"),
-    ("POST", "/users/{user_id}/playlists"),
-    ("PUT", "/me/albums"),
-    ("PUT", "/me/audiobooks"),
-    ("PUT", "/me/episodes"),
-    ("PUT", "/me/following"),
-    ("PUT", "/me/library"),
-    ("PUT", "/me/player"),
-    ("PUT", "/me/player/pause"),
-    ("PUT", "/me/player/play"),
-    ("PUT", "/me/player/repeat"),
-    ("PUT", "/me/player/seek"),
-    ("PUT", "/me/player/shuffle"),
-    ("PUT", "/me/player/volume"),
-    ("PUT", "/me/shows"),
-    ("PUT", "/me/tracks"),
-    ("PUT", "/playlists/{playlist_id}"),
-    ("PUT", "/playlists/{playlist_id}/followers"),
-    ("PUT", "/playlists/{playlist_id}/images"),
-    ("PUT", "/playlists/{playlist_id}/items"),
-    ("PUT", "/playlists/{playlist_id}/tracks"),
-)
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_CLIENT_PATH = os.path.join(ROOT, "spotapi", "client.py")
+
+REQUEST_HELPERS = {
+    "_get_json": "GET",
+    "_put_json": "PUT",
+    "_post_json": "POST",
+    "_delete_json": "DELETE",
+    "_put_body": "PUT",
+    "_put_ids": "PUT",
+    "_delete_ids": "DELETE",
+    "_bools": "GET",
+    "_follow": "PUT",
+    "_unfollow": "DELETE",
+    "_one": "GET",
+    "_many": "GET",
+    "_page": "GET",
+}
+
+TOP_TYPE_PATHS = {
+    "/me/top/artists",
+    "/me/top/tracks",
+}
 
 
 def main():
     parser = argparse.ArgumentParser(description="Compare SpotifyClient endpoint coverage to the OpenAPI schema.")
     parser.add_argument("--schema", default=DEFAULT_SCHEMA_URL, help="OpenAPI schema URL or local file path")
+    parser.add_argument("--client", default=DEFAULT_CLIENT_PATH, help="Path to spotapi/client.py")
+    parser.add_argument("--map", action="store_true", help="Print the OpenAPI path to SpotifyClient method map")
     args = parser.parse_args()
 
     schema = load_schema(args.schema)
-    report = endpoint_coverage(schema)
+    client_endpoints = extract_client_endpoints(args.client)
+    report = endpoint_coverage(schema, client_endpoints)
 
     print("openapi endpoints:", len(report["openapi"]))
-    print("implemented endpoints:", len(report["implemented"]))
+    print("client endpoints:", len(report["client"]))
     print("covered endpoints:", len(report["covered"]))
-    print("missing endpoints:", len(report["missing"]))
+    print("missing from client:", len(report["missing"]))
+    print("client-only (not in schema):", len(report["extra"]))
 
     if report["missing"]:
         print()
-        print("missing:")
+        print("missing from client:")
         for method, path, operation_id in report["missing"]:
-            print(method, path, operation_id)
+            label = operation_id or ""
+            print(method, path, label)
 
     if report["extra"]:
         print()
-        print("implemented_not_in_schema:")
-        for method, path in report["extra"]:
-            print(method, path)
+        print("client-only (not in schema):")
+        for method, path, client_methods in report["extra"]:
+            print(method, path, format_methods(client_methods))
+
+    if args.map or report["missing"]:
+        print()
+        print("openapi path -> SpotifyClient method(s):")
+        for method, path, operation_id, client_methods in report["mapping"]:
+            label = operation_id or ""
+            print("{} {} -> {}  {}".format(method, path, format_methods(client_methods), label).rstrip())
 
 
-def endpoint_coverage(schema, implemented=IMPLEMENTED_ENDPOINTS):
+def endpoint_coverage(schema, client_endpoints):
     openapi = openapi_endpoints(schema)
-    implemented_set = set(implemented)
     openapi_keys = set((method, path) for method, path, operation_id in openapi)
 
-    missing = tuple(item for item in openapi if (item[0], item[1]) not in implemented_set)
-    covered = tuple(item for item in openapi if (item[0], item[1]) in implemented_set)
-    extra = tuple(sorted(implemented_set - openapi_keys))
+    client_by_key = {}
+    for method, path, client_method in client_endpoints:
+        key = (method, path)
+        client_by_key.setdefault(key, set()).add(client_method)
+
+    client_keys = set(client_by_key)
+
+    missing = []
+    covered = []
+    mapping = []
+
+    for method, path, operation_id in openapi:
+        client_methods = client_methods_for_openapi(client_by_key, method, path)
+        if client_methods:
+            covered.append((method, path, operation_id))
+        else:
+            missing.append((method, path, operation_id))
+        mapping.append((method, path, operation_id, sorted(client_methods)))
+
+    extra = []
+    for key in sorted(client_keys - openapi_keys):
+        extra.append((key[0], key[1], sorted(client_by_key[key])))
 
     return {
         "openapi": openapi,
-        "implemented": tuple(sorted(implemented_set)),
-        "covered": covered,
-        "missing": missing,
-        "extra": extra,
+        "client": tuple(sorted(client_keys)),
+        "covered": tuple(covered),
+        "missing": tuple(missing),
+        "extra": tuple(extra),
+        "mapping": tuple(mapping),
     }
+
+
+def client_methods_for_openapi(client_by_key, method, path):
+    direct = client_by_key.get((method, path), set())
+    if direct:
+        return direct
+
+    if path == "/me/top/{type}":
+        methods = set()
+        for top_path in TOP_TYPE_PATHS:
+            methods.update(client_by_key.get((method, top_path), set()))
+        return methods
+
+    return set()
+
+
+def extract_client_endpoints(client_path):
+    with open(client_path) as file:
+        source = file.read()
+
+    tree = ast.parse(source)
+    endpoints = []
+    wrapper_map = {}
+
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef) or node.name != "SpotifyClient":
+            continue
+        wrapper_map = build_wrapper_map(node)
+        for item in node.body:
+            if not isinstance(item, ast.FunctionDef):
+                continue
+            endpoints.extend(extract_method_endpoints(item))
+
+    expanded = []
+    for method, path, client_method in endpoints:
+        expanded.append((method, path, client_method))
+        if client_method.startswith("_"):
+            for wrapper in sorted(wrapper_map.get(client_method, ())):
+                expanded.append((method, path, wrapper))
+
+    return tuple(sorted(set(expanded)))
+
+
+def build_wrapper_map(class_node):
+    wrappers = {}
+    for item in class_node.body:
+        if not isinstance(item, ast.FunctionDef):
+            continue
+        if item.name.startswith("_"):
+            continue
+        for node in ast.walk(item):
+            if not isinstance(node, ast.Call):
+                continue
+            if not isinstance(node.func, ast.Attribute):
+                continue
+            if not isinstance(node.func.value, ast.Name) or node.func.value.id != "self":
+                continue
+            callee = node.func.attr
+            if callee.startswith("_"):
+                wrappers.setdefault(callee, set()).add(item.name)
+    return wrappers
+
+
+def extract_method_endpoints(method_node):
+    endpoints = []
+
+    for node in ast.walk(method_node):
+        if not isinstance(node, ast.Call):
+            continue
+        if not isinstance(node.func, ast.Attribute):
+            continue
+        if not isinstance(node.func.value, ast.Name) or node.func.value.id != "self":
+            continue
+
+        helper = node.func.attr
+        http_method = REQUEST_HELPERS.get(helper)
+        if http_method is None:
+            continue
+
+        path = path_from_call(helper, node.args)
+        if path is None:
+            continue
+
+        endpoints.append((http_method, canonical_path(path), method_node.name))
+
+    return endpoints
+
+
+def path_from_call(helper, args):
+    if helper == "_many":
+        if len(args) < 3:
+            return None
+        return path_from_ast(args[2])
+
+    if helper == "_one":
+        if len(args) < 2:
+            return None
+        return path_from_ast(args[1])
+
+    if helper == "_page":
+        if len(args) < 2:
+            return None
+        return path_from_ast(args[1])
+
+    if not args:
+        return None
+    return path_from_ast(args[0])
+
+
+def path_from_ast(node):
+    if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value.startswith("/"):
+        return node.value
+
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left = path_from_ast(node.left)
+        right = path_from_ast(node.right)
+        if left is None or right is None:
+            return None
+        return left + right
+
+    if isinstance(node, ast.Call):
+        return path_id_placeholder(node)
+
+    return None
+
+
+def path_id_placeholder(node):
+    if not isinstance(node.func, ast.Attribute):
+        return None
+    if not isinstance(node.func.value, ast.Name) or node.func.value.id != "self":
+        return None
+    if node.func.attr != "_path_id" or not node.args:
+        return None
+    if not isinstance(node.args[0], ast.Name):
+        return None
+
+    arg = node.args[0].id
+    if arg == "user_id":
+        return "{user_id}"
+    if arg == "category_id":
+        return "{category_id}"
+    return "{id}"
+
+
+def canonical_path(path):
+    if not path:
+        return path
+
+    path = normalize_path_params(path)
+
+    if path in TOP_TYPE_PATHS:
+        return "/me/top/{type}"
+
+    return path
+
+
+def normalize_path_params(path):
+    if "{user_id}" in path or "{category_id}" in path or "{playlist_id}" in path:
+        return path
+
+    if path.startswith("/users/") and "{id}" in path:
+        return path.replace("{id}", "{user_id}", 1)
+
+    if path.startswith("/browse/categories/") and "{id}" in path:
+        return path.replace("{id}", "{category_id}", 1)
+
+    if path.startswith("/playlists/") and "{id}" in path:
+        return path.replace("{id}", "{playlist_id}", 1)
+
+    return path
 
 
 def openapi_endpoints(schema):
@@ -159,6 +287,12 @@ def openapi_endpoints(schema):
             if operation is not None:
                 endpoints.append((method, path, operation.get("operationId")))
     return tuple(endpoints)
+
+
+def format_methods(methods):
+    if not methods:
+        return "(missing)"
+    return ", ".join(method + "()" for method in methods)
 
 
 if __name__ == "__main__":
