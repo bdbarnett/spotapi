@@ -2,11 +2,11 @@ from _bootstrap import bootstrap
 
 bootstrap()
 
-from spotapi import user_client
+from spotapi import SpotifyClient
 
 
 def main():
-    client = user_client()
+    client = SpotifyClient()
     page = client.saved_tracks(market="US", limit=5)
 
     print_tracks(page)

@@ -2,11 +2,11 @@ from _bootstrap import bootstrap
 
 bootstrap()
 
-from spotapi import user_client
+from spotapi import SpotifyClient
 
 
 def main():
-    client = user_client()
+    client = SpotifyClient()
     page = client.current_user_playlists(limit=10)
 
     for playlist in page:

@@ -2,14 +2,14 @@ from _bootstrap import bootstrap
 
 bootstrap()
 
-from spotapi import app_client
+from spotapi import SpotifyClient
 
 
 TRACK_ID = "11dFghVXANMlKmJXsNCbNl"
 
 
 def main():
-    client = app_client()
+    client = SpotifyClient()
     track = client.track(TRACK_ID, market="US")
 
     print("track:", track.name)

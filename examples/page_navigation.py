@@ -2,14 +2,14 @@ from _bootstrap import bootstrap
 
 bootstrap()
 
-from spotapi import app_client
+from spotapi import SpotifyClient
 
 
 ALBUM_ID = "4aawyAB9vmqN3uQ7FjRGTy"
 
 
 def main():
-    client = app_client()
+    client = SpotifyClient()
     page = client.album_tracks(ALBUM_ID, market="US", limit=2)
 
     print("first page:")

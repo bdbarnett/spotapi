@@ -1,6 +1,6 @@
 import unittest
 
-from spotapi.config import config_available
+from spotapi import config_available
 
 
 @unittest.skipUnless(
@@ -8,19 +8,21 @@ from spotapi.config import config_available
     "Copy spotapi.local.json.example to spotapi.local.json and add credentials",
 )
 class SpotifyLiveTest(unittest.TestCase):
-    def test_user_client_me(self):
-        from spotapi import user_client
+    def test_spotify_client_me(self):
+        from spotapi import SpotifyClient
 
-        client = user_client()
+        client = SpotifyClient()
         user = client.me()
 
         self.assertIsNotNone(user.id)
         self.assertIsNotNone(user.display_name)
 
-    def test_app_client_track(self):
-        from spotapi import app_client
+    def test_spotify_client_track_with_client_credentials(self):
+        from spotapi import SpotifyClient, credentials_from_config, load_config
 
-        client = app_client()
+        config = load_config()
+        client_id, client_secret = credentials_from_config(config)
+        client = SpotifyClient(client_id=client_id, client_secret=client_secret)
         track = client.track("11dFghVXANMlKmJXsNCbNl", market="US")
 
         self.assertEqual(track.id, "11dFghVXANMlKmJXsNCbNl")

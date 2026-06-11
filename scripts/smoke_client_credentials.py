@@ -6,12 +6,14 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from spotapi import app_client
+from spotapi import SpotifyClient, credentials_from_config, load_config
 
 
 def main():
     try:
-        client = app_client()
+        config = load_config()
+        client_id, client_secret = credentials_from_config(config)
+        client = SpotifyClient(client_id=client_id, client_secret=client_secret)
     except Exception as error:
         raise SystemExit(str(error))
 

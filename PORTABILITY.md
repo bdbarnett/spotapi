@@ -12,13 +12,7 @@ memory:
 - `spotapi.objects`
 - `spotapi.object_specs`
 - `spotapi.client`
-- `spotapi.scopes`
 - `spotapi.auth`
-- `spotapi.token_cache`
-
-`import spotapi` loads only the portable core plus lazy exports. CPython-only
-helpers in `spotapi.config` and `spotapi.oauth_flow` are imported only when
-their attributes are accessed, for example `from spotapi import user_client`.
 
 The client delegates all HTTP behavior to `spotapi.transport`.
 
@@ -50,39 +44,34 @@ Basic auth helpers import optional modules inside helper functions:
 If a runtime does not provide one of those modules, the relevant helper raises
 `SpotifyAuthError`.
 
-## Config And Token Files
+`spotapi.auth` also contains:
 
-`spotapi.config` reads and writes `spotapi.local.json` using `json` and local
-file I/O. It is intended for CPython development workflows, examples, scripts,
-and live tests.
+- `spotapi.local.json` load/save helpers
+- `TokenCache` for saving OAuth tokens to `tokens.json`
+- Interactive browser OAuth helpers such as `authorize_with_local_server()`
 
-`spotapi.token_cache` stores OAuth tokens separately in `tokens.json` by default.
-Both modules only touch the filesystem when their load/save helpers are called.
+Those helpers import `json`, local file I/O, `http.server`, or `webbrowser` only
+when they run. On constrained devices, construct `AuthorizationCodeAuth` or
+`SpotifyClient` directly with in-memory tokens instead.
 
-On constrained devices, skip these helpers and construct `AuthorizationCodeAuth`
-or `SpotifyClient` directly with in-memory tokens.
+## Config-Based Client
 
-## Interactive OAuth
+`SpotifyClient()` with no credentials reads `spotapi.local.json`, reuses
+`tokens.json` when available, and runs interactive browser OAuth on first use
+when needed. That path is intended for CPython development workflows, examples,
+scripts, and live tests.
 
-`spotapi.oauth_flow` provides the CPython browser login flow used by
-`user_client()`. It imports CPython-only modules only when its functions run:
+Portable applications can call `SpotifyClient(...)` directly with explicit
+credentials, auth, or access tokens instead.
 
-- `http.server` for the localhost callback
-- `webbrowser` to open the authorize URL
+## CPython-Only Workflows
 
-MicroPython and CircuitPython runtimes should perform OAuth out of band and pass
-resulting tokens into `AuthorizationCodeAuth` manually.
-
-## CPython-Only Project Files
-
-The following areas are development or desktop workflows and are not part of the
-portable core:
+The following areas are development or desktop workflows and are not required on
+embedded runtimes:
 
 - `scripts/`
 - `tests/`
-- `spotapi.oauth_flow`
-- `spotapi.config`
-- examples that load `spotapi.local.json` or call `user_client()`
+- examples that load `spotapi.local.json` or call `SpotifyClient()` with no args
 
 Portable applications can still use the core client, auth, transport, and object
-layers without the config or interactive OAuth helpers.
+layers without the local config file or interactive OAuth helpers.

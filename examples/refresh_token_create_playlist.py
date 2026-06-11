@@ -2,8 +2,8 @@ from _bootstrap import bootstrap
 
 bootstrap()
 
-from spotapi import user_client
-from spotapi.config import config_value, load_config, require_write_examples
+from spotapi import SpotifyClient
+from spotapi import config_value, load_config, require_write_examples
 
 
 def main():
@@ -20,7 +20,7 @@ def main():
         "Created by spotapi example code",
     )
 
-    client = user_client()
+    client = SpotifyClient()
     playlist = client.create_playlist(user_id, name, public=False, description=description)
 
     print("playlist:", playlist.name)

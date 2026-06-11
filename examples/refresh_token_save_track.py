@@ -2,8 +2,8 @@ from _bootstrap import bootstrap
 
 bootstrap()
 
-from spotapi import user_client
-from spotapi.config import require_write_examples
+from spotapi import SpotifyClient
+from spotapi import require_write_examples
 
 
 TRACK_ID = "11dFghVXANMlKmJXsNCbNl"
@@ -11,7 +11,7 @@ TRACK_ID = "11dFghVXANMlKmJXsNCbNl"
 
 def main():
     require_write_examples()
-    client = user_client()
+    client = SpotifyClient()
     client.save_tracks([TRACK_ID])
 
     saved = client.contains_saved_tracks([TRACK_ID])

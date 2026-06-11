@@ -2,11 +2,11 @@ from _bootstrap import bootstrap
 
 bootstrap()
 
-from spotapi import user_client
+from spotapi import SpotifyClient
 
 
 def main():
-    client = user_client()
+    client = SpotifyClient()
     current = client.current_playback()
 
     if not current.raw():

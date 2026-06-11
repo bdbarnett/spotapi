@@ -48,13 +48,36 @@ class SpotifyClientError(Exception):
 class SpotifyClient:
     API_BASE_URL = API_BASE_URL
 
-    def __init__(self, access_token=None, client_id=None, client_secret=None, transport=None, auth=None, auto_set=True):
+    def __init__(
+        self,
+        access_token=None,
+        client_id=None,
+        client_secret=None,
+        transport=None,
+        auth=None,
+        auto_set=True,
+        config_path=None,
+        scope=None,
+        authenticate_if_needed=True,
+        auth_state="spotapi",
+    ):
         self.access_token = access_token
         self.transport = transport
         self.auth = auth
 
-        if self.auth is None and client_id is not None and client_secret is not None:
-            self.auth = ClientCredentialsAuth(client_id, client_secret, transport=transport)
+        if self.auth is None and access_token is None:
+            if client_id is not None and client_secret is not None:
+                self.auth = ClientCredentialsAuth(client_id, client_secret, transport=transport)
+            else:
+                from .auth import auth_from_config
+
+                self.auth = auth_from_config(
+                    config_path=config_path,
+                    scope=scope,
+                    transport=transport,
+                    authenticate_if_needed=authenticate_if_needed,
+                    auth_state=auth_state,
+                )
 
         if auto_set:
             set_client(self)

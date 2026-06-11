@@ -6,8 +6,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from spotapi import user_client
-from spotapi.config import token_cache_from_config, load_config
+from spotapi import SpotifyClient, load_config, token_cache_from_config
 
 
 def main():
@@ -23,7 +22,7 @@ def main():
     print()
 
     try:
-        client = user_client()
+        client = SpotifyClient()
     except Exception as error:
         raise SystemExit("Smoke test failed: {}".format(error))
 

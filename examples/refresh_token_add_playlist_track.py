@@ -2,8 +2,8 @@ from _bootstrap import bootstrap
 
 bootstrap()
 
-from spotapi import snapshot_id, user_client
-from spotapi.config import config_value, load_config, require_write_examples
+from spotapi import SpotifyClient, snapshot_id
+from spotapi import config_value, load_config, require_write_examples
 
 
 TRACK_URI = "spotify:track:11dFghVXANMlKmJXsNCbNl"
@@ -16,7 +16,7 @@ def main():
     if not playlist_id:
         raise SystemExit("Set playlist_id in spotapi.local.json")
 
-    client = user_client()
+    client = SpotifyClient()
     result = client.add_playlist_items(playlist_id, [TRACK_URI])
 
     print("snapshot_id:", snapshot_id(result))

@@ -2,11 +2,11 @@ from _bootstrap import bootstrap
 
 bootstrap()
 
-from spotapi import user_client
+from spotapi import SpotifyClient
 
 
 def main():
-    client = user_client()
+    client = SpotifyClient()
     queue = client.queue()
 
     if queue.currently_playing is not None:

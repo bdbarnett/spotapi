@@ -13,10 +13,10 @@ transport helpers, read methods, selected write methods, examples, and live test
 - PKCE verifier/challenge helpers
 - `TokenCache` for access/refresh token persistence
 - `spotapi.local.json` config file for credentials and example settings
-- `app_client()` and `user_client()` helpers built on the config file
-- Automatic browser OAuth on first `user_client()` call
+- `SpotifyClient()` config-file bootstrap from `spotapi.local.json`
+- Automatic browser OAuth on first `SpotifyClient()` call when needed
 - OAuth error translation into `SpotifyAuthError`
-- CPython interactive OAuth flow in `spotapi.oauth_flow`
+- CPython interactive OAuth flow in `spotapi.auth`
 - Manual callback URL parsing and lower-level OAuth examples
 - CPython `urllib` transport plus custom transport hooks
 - JSON and raw-body write transports

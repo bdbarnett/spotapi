@@ -10,12 +10,12 @@ The current focus is a lightweight object layer:
 - Generic page navigation helpers
 - Manual bearer token, Client Credentials auth, and Authorization Code auth helpers
 - Local config file for credentials and example settings
-- `user_client()` helper with automatic browser OAuth on first use
+- `SpotifyClient()` loads config and runs browser OAuth on first use when needed
 - Transport functions isolated in `spotapi.transport`
 
 OAuth Authorization Code helpers include URL generation, callback parsing,
 token exchange, refresh handling, PKCE helpers, and CPython interactive login
-through `spotapi.oauth_flow`.
+through `spotapi.auth`.
 
 ## Setup
 
@@ -50,47 +50,34 @@ Local files are ignored by Git:
 
 ## Quick Start
 
-App-authenticated request:
-
 ```python
-from spotapi import app_client
+from spotapi import SpotifyClient
 
-client = app_client()
-track = client.track("11dFghVXANMlKmJXsNCbNl", market="US")
-
-print(track.name)
-print(track.album.name)
-print(track.artists[0].name)
-```
-
-User-authenticated request:
-
-```python
-from spotapi import user_client
-
-client = user_client()
+client = SpotifyClient()
 user = client.me()
 
 print(user.display_name)
 ```
 
-On the first call, `user_client()` prints step-by-step browser login
-instructions, runs PKCE OAuth on `http://127.0.0.1:8080`, saves tokens to
-`tokens.json`, and then continues. Later calls refresh the saved token
-automatically.
+With `spotapi.local.json` in place, `SpotifyClient()` loads your app
+credentials, reuses `tokens.json` when available, and runs PKCE browser login on
+first use when needed.
 
 On WSL, copy the printed authorize URL into a browser on Windows if it does
 not open automatically.
 
-You can also construct clients manually:
+You can also pass credentials or auth explicitly:
 
 ```python
-from spotapi import SpotifyClient
+from spotapi import AuthorizationCodeAuth, SpotifyClient
 
 client = SpotifyClient(
     client_id="your-client-id",
     client_secret="your-client-secret",
 )
+
+client = SpotifyClient(auth=AuthorizationCodeAuth(...))
+client = SpotifyClient(access_token="...")
 ```
 
 ## Smoke Tests
@@ -125,8 +112,7 @@ python examples\refresh_token_saved_albums.py
 python examples\refresh_token_saved_tracks.py
 ```
 
-User examples call `user_client()` and authenticate automatically when needed.
-App examples call `app_client()`.
+Examples call `SpotifyClient()` and authenticate automatically when needed.
 
 `custom_transport.py` shows how CPython `requests`, MicroPython `urequests`, or
 CircuitPython `adafruit_requests`-style modules can be adapted while still
@@ -183,7 +169,7 @@ For the manual exchange examples, add temporary fields to
 }
 ```
 
-For most use, prefer `user_client()` instead of the manual OAuth flow.
+For most use, prefer `SpotifyClient()` instead of the manual OAuth flow.
 
 Library code can also use `TokenCache("tokens.json")` with
 `AuthorizationCodeAuth` to load and save access/refresh token data directly.

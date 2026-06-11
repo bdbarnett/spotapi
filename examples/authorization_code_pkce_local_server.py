@@ -2,11 +2,11 @@ from _bootstrap import bootstrap
 
 bootstrap()
 
-from spotapi import user_client
+from spotapi import SpotifyClient
 
 
 def main():
-    client = user_client(auth_state="spotapi-pkce-local-server")
+    client = SpotifyClient(auth_state="spotapi-pkce-local-server")
     user = client.me()
 
     print("id:", user.id)
