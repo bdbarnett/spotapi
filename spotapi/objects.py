@@ -25,11 +25,11 @@ class SpotifyObject:
         self._data = data or {}
         self._fetched = False
 
-    def get(self, field, fetch=True):
+    def _get(self, field, fetch=True):
         value = self._data.get(field, _MISSING)
 
         if value is _MISSING and fetch and not self._fetched:
-            self.fetch()
+            self._fetch()
             value = self._data.get(field, _MISSING)
 
         if value is _MISSING:
@@ -40,7 +40,7 @@ class SpotifyObject:
     def raw(self):
         return self._data
 
-    def fetch(self):
+    def _fetch(self):
         if self._fetched:
             return self
 
@@ -50,33 +50,33 @@ class SpotifyObject:
         if client is None:
             return self
 
-        object_id = self.get("id", fetch=False)
+        object_id = self._get("id", fetch=False)
         if object_id is None:
             return self
 
-        fresh = self._fetch(client, object_id)
+        fresh = self._fetch_object(client, object_id)
         if fresh is not None:
             self._data.update(fresh.raw())
 
         return self
 
-    def _fetch(self, client, object_id):
+    def _fetch_object(self, client, object_id):
         return None
 
     def _object(self, cls, field, fetch=True):
-        data = self.get(field, fetch=fetch)
+        data = self._get(field, fetch=fetch)
         if data is None:
             return None
         return cls(data)
 
     def _objects(self, cls, field, fetch=True):
-        data = self.get(field, fetch=fetch)
+        data = self._get(field, fetch=fetch)
         if data is None:
             return ()
         return [cls(item) for item in data]
 
     def _typed_object(self, field, type_map, fetch=True):
-        data = self.get(field, fetch=fetch)
+        data = self._get(field, fetch=fetch)
         if data is None:
             return None
 
@@ -87,7 +87,7 @@ class SpotifyObject:
         return _resolve_class(cls_name)(data)
 
     def _typed_objects(self, field, type_map, fetch=True):
-        data = self.get(field, fetch=fetch)
+        data = self._get(field, fetch=fetch)
         if data is None:
             return ()
 
@@ -102,8 +102,8 @@ class SpotifyObject:
 
     def __repr__(self):
         cls = self.__class__.__name__
-        name = self.get("name", fetch=False)
-        object_id = self.get("id", fetch=False)
+        name = self._get("name", fetch=False)
+        object_id = self._get("id", fetch=False)
 
         if name is not None and object_id is not None:
             return "<{} name={!r} id={!r}>".format(cls, name, object_id)
@@ -117,31 +117,31 @@ class Page(SpotifyObject):
 
     @property
     def href(self):
-        return self.get("href", fetch=False)
+        return self._get("href", fetch=False)
 
     @property
     def limit(self):
-        return self.get("limit", fetch=False)
+        return self._get("limit", fetch=False)
 
     @property
     def next(self):
-        return self.get("next", fetch=False)
+        return self._get("next", fetch=False)
 
     @property
     def offset(self):
-        return self.get("offset", fetch=False)
+        return self._get("offset", fetch=False)
 
     @property
     def previous(self):
-        return self.get("previous", fetch=False)
+        return self._get("previous", fetch=False)
 
     @property
     def total(self):
-        return self.get("total", fetch=False)
+        return self._get("total", fetch=False)
 
     @property
     def items(self):
-        data = self.get("items", fetch=False)
+        data = self._get("items", fetch=False)
         if data is None:
             return ()
 
@@ -166,7 +166,7 @@ def _resolve_class(name):
 
 def _field_property(field, fetch):
     def getter(self):
-        return self.get(field, fetch=fetch)
+        return self._get(field, fetch=fetch)
 
     return property(getter)
 
@@ -187,13 +187,13 @@ def _objects_property(cls_name, field, fetch):
 
 def _object_by_key_property(field, key, present_cls_name, absent_cls_name, fetch):
     def getter(self):
-        data = self.get(field, fetch=fetch)
+        data = self._get(field, fetch=fetch)
         if data is None:
             return None
 
         if key not in data and fetch and not self._fetched:
-            self.fetch()
-            data = self.get(field, fetch=False)
+            self._fetch()
+            data = self._get(field, fetch=False)
             if data is None:
                 return None
 
@@ -223,7 +223,7 @@ def _typed_objects_property(field, type_map, fetch):
 
 def _tuple_field_property(field, fetch):
     def getter(self):
-        value = self.get(field, fetch=fetch)
+        value = self._get(field, fetch=fetch)
         if value is None:
             return ()
         return value
@@ -270,10 +270,10 @@ def make_spotify_class(spec):
 
     fetch_method = spec.get("fetch_method")
     if fetch_method is not None:
-        def _fetch(self, client, object_id):
+        def _fetch_object(self, client, object_id):
             return getattr(client, fetch_method)(object_id)
 
-        attrs["_fetch"] = _fetch
+        attrs["_fetch_object"] = _fetch_object
 
     return type(name, (base_class,), attrs)
 
