@@ -7,14 +7,21 @@ from _bootstrap import bootstrap
 
 bootstrap()
 
-from spotapi import AuthorizationCodeAuth, SpotifyAuthError, SpotifyClient, TokenCache
-from spotapi import EXAMPLE_SCOPES
+from spotapi import (
+    SpotifyAuthError,
+    TokenCache,
+    redirect_uri_from_env,
+    token_cache_from_env,
+    user_client_from_env,
+)
+from spotapi.oauth_env import DEFAULT_TOKEN_CACHE_PATH
+from spotapi.scopes import EXAMPLE_SCOPES
 
 
 HOST = environ.get("SPOTIFY_CALLBACK_HOST", "127.0.0.1")
 PORT = int(environ.get("SPOTIFY_CALLBACK_PORT", "8080"))
-REDIRECT_URI = environ.get("SPOTIFY_REDIRECT_URI", "http://{}:{}".format(HOST, PORT))
-TOKEN_FILE = "tokens.json"
+REDIRECT_URI = environ.get("SPOTIFY_REDIRECT_URI", redirect_uri_from_env())
+TOKEN_FILE = environ.get("SPOTIFY_TOKEN_CACHE", DEFAULT_TOKEN_CACHE_PATH)
 
 
 def open_authorize_url_and_wait(url, message):
@@ -76,32 +83,11 @@ def load_refresh_token():
 
 
 def load_tokens():
-    return TokenCache(TOKEN_FILE).load()
+    return token_cache_from_env(TOKEN_FILE).load()
 
 
 def refresh_token_client():
-    import os
-
-    client_id = os.environ.get("SPOTIFY_CLIENT_ID")
-    client_secret = os.environ.get("SPOTIFY_CLIENT_SECRET")
-    redirect_uri = os.environ.get("SPOTIFY_REDIRECT_URI", REDIRECT_URI)
-    token_cache = TokenCache(TOKEN_FILE)
-    tokens = token_cache.load()
-    refresh_token = os.environ.get("SPOTIFY_REFRESH_TOKEN") or tokens.get("refresh_token")
-
-    if not client_id or not client_secret:
-        raise SystemExit("Set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET")
-    if not refresh_token:
-        raise SystemExit("Set SPOTIFY_REFRESH_TOKEN or run a local-server auth example first")
-
-    auth = AuthorizationCodeAuth(
-        client_id,
-        client_secret,
-        redirect_uri,
-        refresh_token=refresh_token,
-        token_cache=token_cache,
-    )
-    return SpotifyClient(auth=auth)
+    return user_client_from_env(token_cache_path=TOKEN_FILE, redirect_uri=REDIRECT_URI)
 
 
 def example_scopes():

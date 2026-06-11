@@ -1,7 +1,6 @@
 import time
 
-from .transport import query_string, unquote_plus
-from .transport import post_form_json
+from .transport import TransportError, post_form_json, query_string, unquote_plus
 
 
 TOKEN_URL = "https://accounts.spotify.com/api/token"
@@ -26,10 +25,10 @@ class ClientCredentialsAuth:
         return self.access_token
 
     def refresh(self):
-        data = post_form_json(
-            TOKEN_URL,
+        data = post_oauth_token(
+            self.client_id,
+            self.client_secret,
             {"grant_type": "client_credentials"},
-            headers={"Authorization": "Basic " + basic_token(self.client_id, self.client_secret)},
             transport=self.transport,
         )
 
@@ -126,12 +125,7 @@ class AuthorizationCodeAuth:
         )
 
     def _post_token(self, data):
-        return post_form_json(
-            TOKEN_URL,
-            data,
-            headers={"Authorization": "Basic " + basic_token(self.client_id, self.client_secret)},
-            transport=self.transport,
-        )
+        return post_oauth_token(self.client_id, self.client_secret, data, transport=self.transport)
 
     def _update_tokens(self, data):
         self.access_token = data["access_token"]
@@ -144,6 +138,35 @@ class AuthorizationCodeAuth:
             self.token_cache.save_auth(self)
 
         return self.access_token
+
+
+def post_oauth_token(client_id, client_secret, data, transport=None):
+    try:
+        return post_form_json(
+            TOKEN_URL,
+            data,
+            headers={"Authorization": "Basic " + basic_token(client_id, client_secret)},
+            transport=transport,
+        )
+    except TransportError as error:
+        raise oauth_error_from_transport(error) from error
+
+
+def oauth_error_from_transport(error):
+    data = error.data
+    if isinstance(data, dict):
+        oauth_error = data.get("error")
+        if oauth_error is not None:
+            message = "Spotify OAuth error: " + str(oauth_error)
+            description = data.get("error_description")
+            if description:
+                message += " (" + str(description) + ")"
+            return SpotifyAuthError(message)
+
+    if error.status is not None:
+        return SpotifyAuthError("Spotify OAuth request failed with HTTP status {}".format(error.status))
+
+    return SpotifyAuthError(str(error))
 
 
 def authorization_url(
