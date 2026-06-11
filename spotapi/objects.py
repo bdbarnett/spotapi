@@ -111,6 +111,17 @@ class SpotifyObject:
             return "<{} id={!r}>".format(cls, object_id)
         return "<{}>".format(cls)
 
+    def __str__(self):
+        try:
+            import json
+        except ImportError:
+            return repr(self._data)
+
+        try:
+            return json.dumps(self._data, indent=2, sort_keys=True)
+        except TypeError:
+            return repr(self._data)
+
 
 class Page(SpotifyObject):
     _item_class = None
