@@ -74,9 +74,13 @@ user = client.me()
 print(user.display_name)
 ```
 
-On the first call, `user_client()` opens a browser window, runs PKCE OAuth on
-`http://127.0.0.1:8080`, saves tokens to `tokens.json`, and then continues.
-Later calls refresh the saved token automatically.
+On the first call, `user_client()` prints step-by-step browser login
+instructions, runs PKCE OAuth on `http://127.0.0.1:8080`, saves tokens to
+`tokens.json`, and then continues. Later calls refresh the saved token
+automatically.
+
+On WSL, copy the printed authorize URL into a browser on Windows if it does
+not open automatically.
 
 You can also construct clients manually:
 
