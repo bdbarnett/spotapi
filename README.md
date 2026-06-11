@@ -118,11 +118,7 @@ python examples\refresh_token_top_tracks.py
 python examples\refresh_token_playlists.py
 python examples\refresh_token_saved_albums.py
 python examples\refresh_token_saved_tracks.py
-python examples\refresh_token_no_arg_methods.py
 ```
-
-`refresh_token_no_arg_methods.py` calls every parameterless read method on
-`SpotifyClient` and prints each return value.
 
 `custom_transport.py` shows how CPython `requests`, MicroPython `urequests`, or
 CircuitPython `adafruit_requests`-style modules can be adapted while still
@@ -132,9 +128,11 @@ reading credentials from `spotapi.local.json`.
 
 `refresh_token_playback_controls.py` is an interactive terminal demo. It prints
 a key map, then loops on single keystrokes to call playback methods such as
-`play()`, `pause()`, `next_track()`, `seek()`, `volume()`, and `queue()`. Press
-`Q` to exit. Requires Premium and an active Spotify device. Uses raw terminal
-input (`termios`) and is intended for Linux/WSL/macOS terminals.
+`play()`, `pause()`, `next_track()`, `seek()`, `volume()`, and `queue()`, plus
+parameterless read methods such as `me()`, `saved_tracks()`, and
+`recently_played()`. Press `l` to reprint the key list. Press `Q` to exit.
+Requires Premium and an active Spotify device for playback controls. Uses raw
+terminal input (`termios`) and is intended for Linux/WSL/macOS terminals.
 
 ```powershell
 python examples\refresh_token_playback_controls.py

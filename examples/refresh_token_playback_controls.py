@@ -88,6 +88,54 @@ class PlaybackControls:
         self._device_list = list(self.client.devices())
         return self._device_list
 
+    def me(self):
+        return self.client.me()
+
+    def available_markets(self):
+        return self.client.available_markets()
+
+    def recommendation_genres(self):
+        return self.client.recommendation_genres()
+
+    def recently_played(self):
+        return self.client.recently_played()
+
+    def current_user_playlists(self):
+        return self.client.current_user_playlists()
+
+    def saved_albums(self):
+        return self.client.saved_albums()
+
+    def saved_tracks(self):
+        return self.client.saved_tracks()
+
+    def saved_episodes(self):
+        return self.client.saved_episodes()
+
+    def saved_shows(self):
+        return self.client.saved_shows()
+
+    def saved_audiobooks(self):
+        return self.client.saved_audiobooks()
+
+    def followed_artists(self):
+        return self.client.followed_artists()
+
+    def top_artists(self):
+        return self.client.top_artists()
+
+    def top_tracks(self):
+        return self.client.top_tracks()
+
+    def categories(self):
+        return self.client.categories()
+
+    def featured_playlists(self):
+        return self.client.featured_playlists()
+
+    def new_releases(self):
+        return self.client.new_releases()
+
 
 def control_table(controls):
     rows = []
@@ -118,6 +166,23 @@ def build_controls(demo):
         ("y", "currently_playing()", demo.currently_playing),
         ("w", "queue()", demo.queue),
         ("v", "devices()", demo.devices),
+        ("m", "me()", demo.me),
+        ("k", "available_markets()", demo.available_markets),
+        ("g", "recommendation_genres()", demo.recommendation_genres),
+        ("h", "recently_played()", demo.recently_played),
+        ("e", "current_user_playlists()", demo.current_user_playlists),
+        ("l", "reprint key list", None),
+        ("2", "saved_albums()", demo.saved_albums),
+        ("3", "saved_tracks()", demo.saved_tracks),
+        ("4", "saved_episodes()", demo.saved_episodes),
+        ("5", "saved_shows()", demo.saved_shows),
+        ("6", "saved_audiobooks()", demo.saved_audiobooks),
+        ("f", "followed_artists()", demo.followed_artists),
+        ("i", "top_artists()", demo.top_artists),
+        ("j", "top_tracks()", demo.top_tracks),
+        ("u", "categories()", demo.categories),
+        ("o", "featured_playlists()", demo.featured_playlists),
+        ("z", "new_releases()", demo.new_releases),
         ("Q", "quit", None),
     )
 
@@ -186,6 +251,13 @@ def main():
         if key == "Q":
             print("exit")
             break
+
+        if key == "l":
+            print()
+            control_table(controls)
+            print()
+            print("Waiting for keys. Press Q to exit.")
+            continue
 
         if key not in controls_by_key:
             print("unknown key")
