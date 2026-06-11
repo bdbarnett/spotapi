@@ -5,8 +5,9 @@ replace.
 
 ## Portable Core
 
-These modules should stay free of CPython-only imports and should run under
-CPython, MicroPython, and CircuitPython when the runtime has enough memory:
+These modules should stay free of CPython-only imports at import time and should
+run under CPython, MicroPython, and CircuitPython when the runtime has enough
+memory:
 
 - `spotapi.objects`
 - `spotapi.object_specs`
@@ -14,6 +15,10 @@ CPython, MicroPython, and CircuitPython when the runtime has enough memory:
 - `spotapi.scopes`
 - `spotapi.auth`
 - `spotapi.token_cache`
+
+`import spotapi` loads only the portable core plus lazy exports. CPython-only
+helpers in `spotapi.config` and `spotapi.oauth_flow` are imported only when
+their attributes are accessed, for example `from spotapi import user_client`.
 
 The client delegates all HTTP behavior to `spotapi.transport`.
 
@@ -60,7 +65,7 @@ or `SpotifyClient` directly with in-memory tokens.
 ## Interactive OAuth
 
 `spotapi.oauth_flow` provides the CPython browser login flow used by
-`user_client()`. It depends on:
+`user_client()`. It imports CPython-only modules only when its functions run:
 
 - `http.server` for the localhost callback
 - `webbrowser` to open the authorize URL

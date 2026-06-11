@@ -1,7 +1,3 @@
-import contextlib
-import os
-import sys
-
 from .auth import SpotifyAuthError
 
 
@@ -63,11 +59,22 @@ def try_open_browser(url):
     except ImportError:
         return False
 
-    with suppress_stderr():
+    suppress_stderr = _stderr_suppressor()
+    if suppress_stderr is None:
         try:
             return webbrowser.open(url)
         except Exception:
             return False
+
+    old_stderr = suppress_stderr[0]
+    devnull = suppress_stderr[1]
+    try:
+        try:
+            return webbrowser.open(url)
+        except Exception:
+            return False
+    finally:
+        _restore_stderr(old_stderr, devnull)
 
 
 def wait_for_oauth_callback(host, port, message, redirect_uri):
@@ -110,6 +117,8 @@ def wait_for_oauth_callback(host, port, message, redirect_uri):
 
 
 def running_on_wsl():
+    import os
+
     if os.environ.get("WSL_DISTRO_NAME"):
         return True
 
@@ -120,21 +129,23 @@ def running_on_wsl():
         return False
 
 
-@contextlib.contextmanager
-def suppress_stderr():
+def _stderr_suppressor():
+    import os
+    import sys
+
     try:
         devnull = open(os.devnull, "w")
     except OSError:
-        yield
-        return
+        return None
 
-    old_stderr = sys.stderr
-    sys.stderr = devnull
-    try:
-        yield
-    finally:
-        sys.stderr = old_stderr
-        devnull.close()
+    return sys.stderr, devnull
+
+
+def _restore_stderr(old_stderr, devnull):
+    import sys
+
+    sys.stderr = old_stderr
+    devnull.close()
 
 
 def redirect_uri_host_port(redirect_uri):

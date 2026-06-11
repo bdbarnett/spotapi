@@ -12,25 +12,6 @@ from .auth import (
     post_oauth_token,
 )
 from .client import SpotifyClient, SpotifyClientError, snapshot_id
-from .config import (
-    DEFAULT_CONFIG_PATH,
-    DEFAULT_REDIRECT_URI,
-    DEFAULT_TOKEN_CACHE_PATH,
-    SpotifyConfigError,
-    app_client,
-    config_available,
-    config_value,
-    credentials_from_config,
-    load_config,
-    redirect_uri_from_config,
-    require_write_examples,
-    save_config,
-    scopes_from_config,
-    token_cache_from_config,
-    user_client,
-    write_examples_enabled,
-)
-from .oauth_flow import authorize_with_local_server
 from .object_specs import SPOTIFY_OBJECT_SPECS
 from .objects import (
     Page,
@@ -52,6 +33,26 @@ from .scopes import (
     USER_PROFILE_SCOPES,
 )
 from .token_cache import TokenCache
+
+
+_CONFIG_EXPORTS = {
+    "DEFAULT_CONFIG_PATH",
+    "DEFAULT_REDIRECT_URI",
+    "DEFAULT_TOKEN_CACHE_PATH",
+    "SpotifyConfigError",
+    "app_client",
+    "config_available",
+    "config_value",
+    "credentials_from_config",
+    "load_config",
+    "redirect_uri_from_config",
+    "require_write_examples",
+    "save_config",
+    "scopes_from_config",
+    "token_cache_from_config",
+    "user_client",
+    "write_examples_enabled",
+}
 
 
 for _spec in SPOTIFY_OBJECT_SPECS:
@@ -107,6 +108,20 @@ __all__ = (
     "USER_PROFILE_SCOPES",
     "TokenCache",
 ) + tuple(_spec["name"] for _spec in SPOTIFY_OBJECT_SPECS)
+
+
+def __getattr__(name):
+    if name == "authorize_with_local_server":
+        from .oauth_flow import authorize_with_local_server
+
+        return authorize_with_local_server
+
+    if name in _CONFIG_EXPORTS:
+        from . import config
+
+        return getattr(config, name)
+
+    raise AttributeError("module {!r} has no attribute {!r}".format(__name__, name))
 
 
 del _objects

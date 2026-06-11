@@ -1,6 +1,5 @@
 from .auth import AuthorizationCodeAuth, SpotifyAuthError, generate_code_verifier
 from .client import SpotifyClient
-from .oauth_flow import authorize_with_local_server
 from .scopes import EXAMPLE_SCOPES
 from .token_cache import TokenCache
 
@@ -191,6 +190,8 @@ def user_client(
         token_cache=cache,
         transport=transport,
     )
+    from .oauth_flow import authorize_with_local_server
+
     authorize_with_local_server(
         auth,
         redirect_uri=redirect_uri,
