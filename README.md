@@ -120,7 +120,8 @@ reading credentials from `spotapi.local.json`.
 
 ### Write Examples
 
-Write examples are disabled by default. Enable them in `spotapi.local.json`:
+Copy `examples/write_examples.json.example` to `examples/write_examples.json`.
+Write examples are disabled by default. Enable them there:
 
 ```json
 {
@@ -134,15 +135,15 @@ Write examples are disabled by default. Enable them in `spotapi.local.json`:
 Then run:
 
 ```powershell
-python examples\refresh_token_add_to_queue.py
-python examples\refresh_token_create_playlist.py
-python examples\refresh_token_add_playlist_track.py
-python examples\refresh_token_set_playlist_cover.py
-python examples\refresh_token_save_track.py
+python examples\write_refresh_token_add_to_queue.py
+python examples\write_refresh_token_create_playlist.py
+python examples\write_refresh_token_add_playlist_track.py
+python examples\write_refresh_token_set_playlist_cover.py
+python examples\write_refresh_token_save_track.py
 ```
 
-Optional config fields also include `playlist_name`, `playlist_description`,
-`track_uri`, and `scopes`.
+Optional fields in `examples/write_examples.json` include `playlist_name`,
+`playlist_description`, and `track_uri`.
 
 ### Manual OAuth Examples
 

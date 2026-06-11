@@ -27,7 +27,6 @@ def main():
             "client_id": client_id,
             "client_secret": client_secret,
             "redirect_uri": redirect_uri,
-            "allow_write_examples": False,
         }
     )
 

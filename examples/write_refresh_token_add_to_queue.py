@@ -3,7 +3,7 @@ from _bootstrap import bootstrap
 bootstrap()
 
 from spotapi import SpotifyClient
-from spotapi import config_value, load_config, require_write_examples
+from config import config_value, load_write_examples_config, require_write_examples
 
 
 DEFAULT_TRACK_URI = "spotify:track:11dFghVXANMlKmJXsNCbNl"
@@ -11,7 +11,7 @@ DEFAULT_TRACK_URI = "spotify:track:11dFghVXANMlKmJXsNCbNl"
 
 def main():
     require_write_examples()
-    config = load_config()
+    config = load_write_examples_config()
     uri = config_value(config, "track_uri", DEFAULT_TRACK_URI)
 
     client = SpotifyClient()

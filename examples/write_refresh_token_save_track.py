@@ -3,7 +3,7 @@ from _bootstrap import bootstrap
 bootstrap()
 
 from spotapi import SpotifyClient
-from spotapi import require_write_examples
+from config import require_write_examples
 
 
 TRACK_ID = "11dFghVXANMlKmJXsNCbNl"

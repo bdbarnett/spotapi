@@ -3,15 +3,15 @@ from _bootstrap import bootstrap
 bootstrap()
 
 from spotapi import SpotifyClient
-from spotapi import config_value, load_config, require_write_examples
+from config import config_value, load_write_examples_config, require_write_examples
 
 
 def main():
     require_write_examples()
-    config = load_config()
+    config = load_write_examples_config()
     user_id = config_value(config, "user_id")
     if not user_id:
-        raise SystemExit("Set user_id in spotapi.local.json")
+        raise SystemExit("Set user_id in examples/write_examples.json")
 
     name = config_value(config, "playlist_name", "spotapi example playlist")
     description = config_value(

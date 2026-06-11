@@ -525,22 +525,6 @@ def token_cache_from_config(config):
     return TokenCache(path)
 
 
-def write_examples_enabled(config=None, path=None):
-    if config is None:
-        config = load_config(path)
-    return bool(config.get("allow_write_examples"))
-
-
-def require_write_examples(config=None, path=None):
-    if config is None:
-        config = load_config(path)
-
-    if not write_examples_enabled(config):
-        raise SpotifyConfigError(
-            "Set allow_write_examples to true in spotapi.local.json to run write examples"
-        )
-
-
 def config_value(config, key, default=None):
     value = config.get(key)
     if value is None:
