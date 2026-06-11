@@ -142,7 +142,8 @@ def response_json(response):
         status = response_status(response)
         if status == 204:
             return None
-        data = parse_response_json(response)
+
+        data = parse_response_json(response, status=status)
     finally:
         close_response(response)
 
@@ -157,23 +158,56 @@ def response_status(response):
         return response.status_code
     if hasattr(response, "status"):
         return response.status
+    if hasattr(response, "getcode"):
+        return response.getcode()
     return None
 
 
-def parse_response_json(response):
-    if hasattr(response, "json"):
-        return response.json()
-
+def read_response_text(response):
     if hasattr(response, "text"):
-        return json_loads(response.text)
+        return response.text
 
     if hasattr(response, "content"):
-        return json_loads(response.content)
+        content = response.content
+        if not isinstance(content, str):
+            content = content.decode("utf-8")
+        return content
 
     if hasattr(response, "read"):
-        return json_loads(response.read())
+        data = response.read()
+        if not isinstance(data, str):
+            data = data.decode("utf-8")
+        return data
+
+    return ""
+
+
+def parse_response_json(response, status=None):
+    if hasattr(response, "json"):
+        try:
+            return response.json()
+        except ValueError:
+            if _successful_status(status):
+                return None
+            raise
+
+    if hasattr(response, "text") or hasattr(response, "content") or hasattr(response, "read"):
+        body = read_response_text(response)
+        if not body or not body.strip():
+            return None
+
+        try:
+            return json_loads(body)
+        except ValueError:
+            if _successful_status(status):
+                return None
+            raise
 
     return response
+
+
+def _successful_status(status):
+    return status is not None and 200 <= status < 300
 
 
 def close_response(response):
@@ -225,7 +259,15 @@ def urllib_request_json(request):
         return response_json(response)
     except Exception as error:
         if hasattr(error, "code") and hasattr(error, "read"):
-            data = json_loads(error.read())
+            raw = error.read()
+            if not isinstance(raw, str):
+                raw = raw.decode("utf-8")
+            data = None
+            if raw and raw.strip():
+                try:
+                    data = json_loads(raw)
+                except ValueError:
+                    data = raw
             raise TransportError("HTTP status {}".format(error.code), status=error.code, data=data)
         raise
 
