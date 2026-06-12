@@ -104,6 +104,38 @@ embedded runtimes:
 Portable applications can still use the core client, auth, transport, and object
 layers without the local config file or interactive OAuth helpers.
 
+## Runtime Validation
+
+| Runtime | Environment | Status |
+|---------|-------------|--------|
+| CPython | Linux / WSL / desktop | Primary development target |
+| MicroPython | Linux (UNIX port) | Validated with discovery scripts |
+| MicroPython | Embedded hardware | Not yet validated |
+| CircuitPython | Embedded hardware | Not yet validated |
+
+On embedded targets, pass credentials and tokens explicitly to `SpotifyClient`
+or `AuthorizationCodeAuth` rather than relying on `spotapi.local.json`,
+browser OAuth, or `tokens.json` in the project root.
+
+Suggested hardware smoke commands (from the repo root on the device):
+
+```text
+micropython scripts/spotapi_simpletest.py
+micropython scripts/spotapi_playlist_discovery.py
+```
+
+CircuitPython requires `wifi`, `socketpool`, `ssl`, and `adafruit_requests` for
+HTTP. Copy the `spotapi` package and supply a pre-obtained access or refresh token.
+
+## Client and Token Conventions
+
+Object hydration uses a **global client** via `set_client()` / `get_client()`.
+`SpotifyClient(auto_set=True)` registers itself by default. Per-object client
+references are not planned.
+
+`TokenCache` and the default `tokens.json` path are sufficient for development.
+A configurable token base directory is not planned.
+
 ## Spotify Web API (February 2026 Dev Mode)
 
 Spotify restricted Development Mode apps starting February 2026. See Spotify's

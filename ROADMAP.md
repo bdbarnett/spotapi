@@ -39,16 +39,21 @@ transport helpers, read methods, selected write methods, examples, and live test
 - Offline client retry tests in `tests/test_client.py`
 - Lazy `Playlist.items` via `LazyPageRef` (metadata without fetch; load on access)
 - `HydrationError` for contextual object-layer fetch failures
+- MicroPython on Linux validated with discovery scripts
 
 ## Good Next Steps
 
-- Review MicroPython and CircuitPython compatibility on-device or in their runtimes.
+- Validate MicroPython and CircuitPython on embedded hardware; record results in `PORTABILITY.md`.
 - Keep the schema generator aligned with hand-curated object_by_key overrides and February 2026 endpoint removals.
-- Decide whether to package examples, keep them source-only, or move them to docs.
+- Optionally deprecate removed Dev Mode client methods (`user()`, legacy `playlist_tracks()`) in docstrings and endpoint coverage output.
+
+## Resolved Decisions
+
+- **Global client** — keep `set_client()` / `SpotifyClient(auto_set=True)`; objects do not carry a per-instance client.
+- **Token storage** — keep `TokenCache` and default `tokens.json` paths as they are.
+- **Examples** — keep `examples/` as source-only in the repo for now (no packaging or docs migration yet).
 
 ## Open Design Questions
 
-- Should `SpotifyClient` stay a singleton-by-default, or should object instances optionally carry a client later?
 - Are there additional non-playlist mutation response shapes worth modeling?
 - Should write methods validate Spotify limits such as max IDs per request, or leave that to API errors?
-- Should config and token files support a configurable base directory for multi-project setups?

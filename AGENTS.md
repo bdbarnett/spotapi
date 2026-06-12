@@ -35,3 +35,7 @@ Non-obvious notes:
 - To exercise the client without network, replace `spotapi.transport.requests`
   with a mock object exposing `get`/`post` (and `put`/`delete` for write paths)
   before constructing `SpotifyClient`.
+- MicroPython on Linux is validated; embedded MicroPython and CircuitPython on
+  hardware are still outstanding. See `PORTABILITY.md` "Runtime Validation".
+- Object hydration uses the global client (`set_client()`); per-object clients
+  are not planned.
