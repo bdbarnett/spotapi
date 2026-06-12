@@ -18,8 +18,8 @@ Common commands (run from repo root):
 - Lint: none configured (no ruff/mypy/flake8 config exists despite cache entries in `.gitignore`).
 
 Non-obvious notes:
-- The full test suite runs entirely offline with mocked transports; no Spotify
-  credentials or network are required for tests/build.
+- The test suite is small; live tests are skipped without `spotapi.local.json`.
+  No Spotify credentials or network are required for tests/build.
 - `examples/*.py` and `scripts/smoke_client_credentials.py` need real Spotify
   credentials (`SPOTIFY_CLIENT_ID`/`SPOTIFY_CLIENT_SECRET`, and a refresh token /
   callback URL for user-scoped flows) and live network. They are NOT needed to
@@ -28,6 +28,6 @@ Non-obvious notes:
   Spotify's OpenAPI schema from the network by default (pass a local schema path to
   run offline); `generate_object_specs.py` only needs `PyYAML` (the `schema` extra)
   for YAML schemas.
-- To exercise the client without network, inject a custom transport object exposing
-  `get`/`post` (requests-style) into `SpotifyClient(..., transport=...)`; see
-  `examples/custom_transport.py` and `tests/test_client.py` for the pattern.
+- To exercise the client without network, replace `spotapi.transport.requests`
+  with a mock object exposing `get`/`post` (and `put`/`delete` for write paths)
+  before constructing `SpotifyClient`.

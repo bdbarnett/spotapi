@@ -20,7 +20,7 @@ transport helpers, read methods, selected write methods, examples, and live test
 - OAuth error translation into `SpotifyAuthError`
 - CPython interactive OAuth flow in `spotapi.auth`
 - Manual callback URL parsing and lower-level OAuth examples
-- CPython `urllib` transport plus custom transport hooks
+- Automatic HTTP backend selection (`requests` or CircuitPython `adafruit_requests`)
 - JSON and raw-body write transports; non-JSON 2xx responses treated as success
 - Read methods for major Spotify object families, paging, search, playback, library, and user endpoints
 - Write methods for saved-library items, follows, playlists, and playback controls

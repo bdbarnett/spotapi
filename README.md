@@ -120,9 +120,9 @@ python examples\refresh_token_saved_albums.py
 python examples\refresh_token_saved_tracks.py
 ```
 
-`custom_transport.py` shows how CPython `requests`, MicroPython `urequests`, or
-CircuitPython `adafruit_requests`-style modules can be adapted while still
-reading credentials from `spotapi.local.json`.
+`custom_transport.py` fetches available markets with Client Credentials. HTTP is
+chosen automatically in `spotapi.transport` from `requests` or a CircuitPython
+`adafruit_requests` session.
 
 ### Playback Controls
 
@@ -275,8 +275,8 @@ Some playback controls require Spotify Premium and an active device.
 
 - Interactive browser OAuth uses CPython `http.server` and `webbrowser`.
 - User-specific endpoints need a user access token; Client Credentials is not enough.
-- The default HTTP transport uses CPython `urllib`.
-- MicroPython/CircuitPython users should pass a compatible custom transport.
+- HTTP requires `requests` on CPython and MicroPython, or a CircuitPython
+  `adafruit_requests` session.
 
 See `ROADMAP.md` for implemented areas, next steps, and open design questions.
 See `PORTABILITY.md` for CPython, MicroPython, and CircuitPython boundary notes.

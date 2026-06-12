@@ -20,16 +20,20 @@ The client delegates all HTTP behavior to `spotapi.transport`.
 
 `spotapi.transport` owns HTTP and encoding differences:
 
-- CPython default HTTP support through `urllib`
-- Custom transport objects/functions for `requests`, `urequests`, or
-  `adafruit_requests`
+- Automatic HTTP backend selection through `_find_requests()`
+- `requests` on CPython and MicroPython
+- A CircuitPython `adafruit_requests` session when `requests` is not available
 - JSON request/response handling
 - Form encoding and URL query encoding
 - Raw body uploads
 - Response cleanup through `close()` or `deinit()`
 
-MicroPython and CircuitPython users should pass a compatible transport object
-instead of relying on the CPython `urllib` fallback.
+When `spotapi.transport` is imported, it sets `requests = _find_requests()`.
+Other modules can use `from spotapi.transport import requests` if they need the
+resolved HTTP client.
+
+To mock HTTP in tests, replace `spotapi.transport.requests` before making API
+calls.
 
 ## Auth
 

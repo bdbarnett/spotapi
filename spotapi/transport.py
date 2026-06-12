@@ -3,12 +3,40 @@ API_BASE_URL = "https://api.spotify.com/v1"
 
 class TransportError(Exception):
     def __init__(self, message, status=None, data=None):
-        Exception.__init__(self, message)
+        self.args = (message,)
         self.status = status
         self.data = data
 
 
-def get_json(path_or_url, access_token=None, query=None, headers=None, transport=None, base_url=API_BASE_URL):
+def _find_requests():
+    try:
+        import requests
+
+        return requests
+    except ImportError:
+        pass
+
+    try:
+        import ssl
+        import wifi
+        import socketpool
+        import adafruit_requests
+
+        pool = socketpool.SocketPool(wifi.radio)
+        return adafruit_requests.Session(pool, ssl.create_default_context())
+    except ImportError:
+        pass
+
+    raise TransportError(
+        "No HTTP client is available. Install the requests package, or on "
+        "CircuitPython use wifi, socketpool, ssl, and adafruit_requests."
+    )
+
+
+requests = _find_requests()
+
+
+def get_json(path_or_url, access_token=None, query=None, headers=None, base_url=API_BASE_URL):
     url = build_url(path_or_url, query=query, base_url=base_url)
     request_headers = {}
 
@@ -17,42 +45,37 @@ def get_json(path_or_url, access_token=None, query=None, headers=None, transport
     if access_token is not None:
         request_headers["Authorization"] = "Bearer " + access_token
 
-    if transport is not None:
-        return transport_get_json(transport, url, request_headers)
-
-    return urllib_get_json(url, request_headers)
+    response = requests.get(url, headers=request_headers)
+    return response_json(response)
 
 
-def post_form_json(url, data, headers=None, transport=None):
+def post_form_json(url, data, headers=None):
     request_headers = {"Content-Type": "application/x-www-form-urlencoded"}
     if headers:
         request_headers.update(headers)
 
     body = query_string(data)
-
-    if transport is not None:
-        return transport_post_form_json(transport, url, body, request_headers)
-
-    return urllib_post_form_json(url, body, request_headers)
+    response = requests.post(url, data=body, headers=request_headers)
+    return response_json(response)
 
 
-def post_json(path_or_url, data=None, access_token=None, query=None, headers=None, transport=None, base_url=API_BASE_URL):
-    return request_json("POST", path_or_url, data, access_token, query, headers, transport, base_url)
+def post_json(path_or_url, data=None, access_token=None, query=None, headers=None, base_url=API_BASE_URL):
+    return request_json("POST", path_or_url, data, access_token, query, headers, base_url)
 
 
-def put_json(path_or_url, data=None, access_token=None, query=None, headers=None, transport=None, base_url=API_BASE_URL):
-    return request_json("PUT", path_or_url, data, access_token, query, headers, transport, base_url)
+def put_json(path_or_url, data=None, access_token=None, query=None, headers=None, base_url=API_BASE_URL):
+    return request_json("PUT", path_or_url, data, access_token, query, headers, base_url)
 
 
-def delete_json(path_or_url, data=None, access_token=None, query=None, headers=None, transport=None, base_url=API_BASE_URL):
-    return request_json("DELETE", path_or_url, data, access_token, query, headers, transport, base_url)
+def delete_json(path_or_url, data=None, access_token=None, query=None, headers=None, base_url=API_BASE_URL):
+    return request_json("DELETE", path_or_url, data, access_token, query, headers, base_url)
 
 
-def put_body(path_or_url, body, content_type, access_token=None, query=None, headers=None, transport=None, base_url=API_BASE_URL):
-    return request_body("PUT", path_or_url, body, content_type, access_token, query, headers, transport, base_url)
+def put_body(path_or_url, body, content_type, access_token=None, query=None, headers=None, base_url=API_BASE_URL):
+    return request_body("PUT", path_or_url, body, content_type, access_token, query, headers, base_url)
 
 
-def request_json(method, path_or_url, data=None, access_token=None, query=None, headers=None, transport=None, base_url=API_BASE_URL):
+def request_json(method, path_or_url, data=None, access_token=None, query=None, headers=None, base_url=API_BASE_URL):
     url = build_url(path_or_url, query=query, base_url=base_url)
     request_headers = {}
 
@@ -66,13 +89,11 @@ def request_json(method, path_or_url, data=None, access_token=None, query=None, 
         request_headers["Content-Type"] = "application/json"
         body = json_dumps(data)
 
-    if transport is not None:
-        return transport_request_json(transport, method, url, body, request_headers)
-
-    return urllib_method_json(method, url, body, request_headers)
+    response = http_request(method, url, body, request_headers)
+    return response_json(response)
 
 
-def request_body(method, path_or_url, body, content_type, access_token=None, query=None, headers=None, transport=None, base_url=API_BASE_URL):
+def request_body(method, path_or_url, body, content_type, access_token=None, query=None, headers=None, base_url=API_BASE_URL):
     url = build_url(path_or_url, query=query, base_url=base_url)
     request_headers = {"Content-Type": content_type}
 
@@ -81,60 +102,22 @@ def request_body(method, path_or_url, body, content_type, access_token=None, que
     if access_token is not None:
         request_headers["Authorization"] = "Bearer " + access_token
 
-    if transport is not None:
-        return transport_request_body(transport, method, url, body, request_headers)
-
-    return urllib_method_json(method, url, body, request_headers)
+    response = http_request(method, url, body, request_headers)
+    return response_json(response)
 
 
-def transport_get_json(transport, url, headers):
-    if hasattr(transport, "get_json"):
-        return transport.get_json(url, headers)
-
-    if hasattr(transport, "get"):
-        response = transport.get(url, headers=headers)
-        return response_json(response)
-
-    return transport(url, headers)
-
-
-def transport_post_form_json(transport, url, body, headers):
-    if hasattr(transport, "post_form_json"):
-        return transport.post_form_json(url, body, headers)
-
-    if hasattr(transport, "post"):
-        response = transport.post(url, data=body, headers=headers)
-        return response_json(response)
-
-    return transport(url, headers, body)
-
-
-def transport_request_json(transport, method, url, body, headers):
-    if hasattr(transport, "request_json"):
-        return transport.request_json(method, url, body, headers)
-
+def http_request(method, url, body, headers):
     method_name = method.lower()
-    if hasattr(transport, method_name):
-        request_method = getattr(transport, method_name)
+    if hasattr(requests, method_name):
+        request_method = getattr(requests, method_name)
         if body is None:
-            response = request_method(url, headers=headers)
-        else:
-            response = request_method(url, data=body, headers=headers)
-        return response_json(response)
+            return request_method(url, headers=headers)
+        return request_method(url, data=body, headers=headers)
 
-    return transport(method, url, headers, body)
+    if hasattr(requests, "request"):
+        return requests.request(method, url, data=body, headers=headers)
 
-
-def transport_request_body(transport, method, url, body, headers):
-    if hasattr(transport, "request_body"):
-        return transport.request_body(method, url, body, headers)
-
-    method_name = method.lower()
-    if hasattr(transport, method_name):
-        response = getattr(transport, method_name)(url, data=body, headers=headers)
-        return response_json(response)
-
-    return transport(method, url, headers, body)
+    raise TransportError("HTTP {} is not supported by the current requests backend".format(method))
 
 
 def response_json(response):
@@ -148,7 +131,7 @@ def response_json(response):
         close_response(response)
 
     if status is not None and (status < 200 or status >= 300):
-        raise TransportError("HTTP status {}".format(status), status=status, data=data)
+        raise TransportError("HTTP status {}".format(status), status, data)
 
     return data
 
@@ -158,6 +141,8 @@ def response_status(response):
         return response.status_code
     if hasattr(response, "status"):
         return response.status
+    if hasattr(response, "code"):
+        return response.code
     if hasattr(response, "getcode"):
         return response.getcode()
     return None
@@ -215,61 +200,6 @@ def close_response(response):
         response.close()
     elif hasattr(response, "deinit"):
         response.deinit()
-
-
-def urllib_get_json(url, headers):
-    try:
-        from urllib.request import Request
-    except ImportError:
-        raise TransportError("No default HTTP transport is available on this Python runtime")
-
-    return urllib_request_json(Request(url, headers=headers))
-
-
-def urllib_post_form_json(url, body, headers):
-    try:
-        from urllib.request import Request
-    except ImportError:
-        raise TransportError("No default HTTP transport is available on this Python runtime")
-
-    body = body.encode("utf-8")
-    return urllib_request_json(Request(url, data=body, headers=headers))
-
-
-def urllib_method_json(method, url, body, headers):
-    try:
-        from urllib.request import Request
-    except ImportError:
-        raise TransportError("No default HTTP transport is available on this Python runtime")
-
-    if body is not None:
-        body = body.encode("utf-8")
-
-    return urllib_request_json(Request(url, data=body, headers=headers, method=method))
-
-
-def urllib_request_json(request):
-    try:
-        from urllib.request import urlopen
-    except ImportError:
-        raise TransportError("No default HTTP transport is available on this Python runtime")
-
-    try:
-        response = urlopen(request)
-        return response_json(response)
-    except Exception as error:
-        if hasattr(error, "code") and hasattr(error, "read"):
-            raw = error.read()
-            if not isinstance(raw, str):
-                raw = raw.decode("utf-8")
-            data = None
-            if raw and raw.strip():
-                try:
-                    data = json_loads(raw)
-                except ValueError:
-                    data = raw
-            raise TransportError("HTTP status {}".format(error.code), status=error.code, data=data)
-        raise
 
 
 def json_loads(data):

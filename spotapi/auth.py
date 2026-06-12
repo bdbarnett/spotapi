@@ -76,10 +76,9 @@ class TokenCache:
 
 
 class ClientCredentialsAuth:
-    def __init__(self, client_id, client_secret, transport=None):
+    def __init__(self, client_id, client_secret):
         self.client_id = client_id
         self.client_secret = client_secret
-        self.transport = transport
         self.access_token = None
         self.expires_at = 0
 
@@ -93,7 +92,6 @@ class ClientCredentialsAuth:
             self.client_id,
             self.client_secret,
             {"grant_type": "client_credentials"},
-            transport=self.transport,
         )
 
         self.access_token = data["access_token"]
@@ -110,7 +108,6 @@ class AuthorizationCodeAuth:
         scope=None,
         refresh_token=None,
         code_verifier=None,
-        transport=None,
         token_cache=None,
     ):
         self.client_id = client_id
@@ -119,7 +116,6 @@ class AuthorizationCodeAuth:
         self.scope = scope
         self.refresh_token = refresh_token
         self.code_verifier = code_verifier
-        self.transport = transport
         self.token_cache = token_cache
         self.access_token = None
         self.expires_at = 0
@@ -189,7 +185,7 @@ class AuthorizationCodeAuth:
         )
 
     def _post_token(self, data):
-        return post_oauth_token(self.client_id, self.client_secret, data, transport=self.transport)
+        return post_oauth_token(self.client_id, self.client_secret, data)
 
     def _update_tokens(self, data):
         self.access_token = data["access_token"]
@@ -204,13 +200,12 @@ class AuthorizationCodeAuth:
         return self.access_token
 
 
-def post_oauth_token(client_id, client_secret, data, transport=None):
+def post_oauth_token(client_id, client_secret, data):
     try:
         return post_form_json(
             TOKEN_URL,
             data,
             headers={"Authorization": "Basic " + basic_token(client_id, client_secret)},
-            transport=transport,
         )
     except TransportError as error:
         raise oauth_error_from_transport(error) from error
@@ -535,7 +530,6 @@ def config_value(config, key, default=None):
 def auth_from_config(
     config_path=None,
     scope=None,
-    transport=None,
     authenticate_if_needed=True,
     auth_state="spotapi",
 ):
@@ -557,7 +551,6 @@ def auth_from_config(
             scope=scope,
             refresh_token=refresh_token,
             token_cache=cache,
-            transport=transport,
         )
 
     if not authenticate_if_needed:
@@ -575,7 +568,6 @@ def auth_from_config(
         scope=scope,
         code_verifier=code_verifier,
         token_cache=cache,
-        transport=transport,
     )
     authorize_with_local_server(
         auth,
