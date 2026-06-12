@@ -37,6 +37,7 @@ from .auth import (
 from .client import SpotifyClient, SpotifyClientError, snapshot_id
 from .object_specs import SPOTIFY_OBJECT_SPECS
 from .objects import (
+    HydrationError,
     Page,
     SpotifyObject,
     get_client,
@@ -59,6 +60,7 @@ __all__ = (
     "SpotifyConfigError",
     "SpotifyClient",
     "SpotifyClientError",
+    "HydrationError",
     "SpotifyObject",
     "get_client",
     "make_spotify_class",

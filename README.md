@@ -95,7 +95,7 @@ hydrates once via the matching `SpotifyClient` getter.
 
 Page-backed fields use `object_by_key` and a `page_method`:
 
-- `playlist.items` → `playlist_items()` (`GET /playlists/{id}/items`)
+- `playlist.items` → lazy `LazyPageRef`; `total`/`href` from the stub, load on `[0]` or iteration via `playlist_items()`
 - `artist.albums` → `artist_albums()` (`GET /artists/{id}/albums`)
 
 `User` and other non-fetchable types only expose fields present in the embedding

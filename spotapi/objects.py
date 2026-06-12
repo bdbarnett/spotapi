@@ -1,10 +1,17 @@
 from .object_specs import SPOTIFY_OBJECT_SPECS
+from .transport import TransportError
 
 
 _MISSING = object()
 _current_client = None
 _CLASS_REGISTRY = {}
 _PAGE_FIELDS = ("href", "limit", "next", "offset", "previous", "total")
+
+
+class HydrationError(Exception):
+    def __init__(self, message, cause=None):
+        self.args = (message,)
+        self.cause = cause
 
 
 def set_client(client):
@@ -14,6 +21,33 @@ def set_client(client):
 
 def get_client():
     return _current_client
+
+
+def _hydration_error(obj, error, page_method=None):
+    endpoint = page_method or obj.__class__._fetch_method
+    name = obj.__class__.__name__
+    object_id = obj._peek("id")
+
+    message = "Failed to hydrate {}".format(name)
+    if object_id is not None:
+        message += " (id={!r})".format(object_id)
+    if endpoint is not None:
+        message += " via {}()".format(endpoint)
+    if error.status is not None:
+        message += ": HTTP {}".format(error.status)
+
+    if endpoint == "user":
+        message += (
+            ". GET /users/{id} is unavailable in Spotify Dev Mode;"
+            " use client.me() for the current user."
+        )
+    elif error.status == 403:
+        message += (
+            " This may be a followed playlist, collaborator restriction,"
+            " or a February 2026 Dev Mode removed endpoint."
+        )
+
+    return HydrationError(message, error)
 
 
 class SpotifyObject:
@@ -77,7 +111,11 @@ class SpotifyObject:
         if object_id is None:
             return self
 
-        fresh = self._fetch_object(client, object_id)
+        try:
+            fresh = self._fetch_object(client, object_id)
+        except TransportError as error:
+            raise _hydration_error(self, error)
+
         if fresh is not None:
             self._data.update(fresh.raw())
             self._fetched = True
@@ -159,6 +197,43 @@ class Page(SpotifyObject):
         return self.items[index]
 
 
+class LazyPageRef(SpotifyObject):
+    def __init__(self, owner, page_method, present_cls_name, ref_data=None):
+        super().__init__(ref_data or {})
+        self._owner = owner
+        self._page_method = page_method
+        self._present_cls_name = present_cls_name
+        self._page = None
+
+    def _load_page(self):
+        if self._page is not None:
+            return self._page
+
+        client = get_client()
+        object_id = self._owner._peek("id")
+        if client is None or object_id is None:
+            raise HydrationError(
+                "Cannot load {} without a client and owner id".format(self._page_method)
+            )
+
+        try:
+            page = getattr(client, self._page_method)(object_id)
+        except TransportError as error:
+            raise _hydration_error(self._owner, error, self._page_method)
+
+        self._page = page
+        return self._page
+
+    def __iter__(self):
+        return iter(self._load_page())
+
+    def __len__(self):
+        return len(self._load_page())
+
+    def __getitem__(self, index):
+        return self._load_page()[index]
+
+
 def _resolve_class(name):
     if name is None:
         return None
@@ -196,8 +271,26 @@ def _objects_property(cls_name, field):
     return property(getter)
 
 
-def _object_by_key_property(field, key, present_cls_name, absent_cls_name, page_method=None):
+def _object_by_key_property(
+    field,
+    key,
+    present_cls_name,
+    absent_cls_name,
+    page_method=None,
+    lazy=False,
+):
     def getter(self):
+        if lazy and page_method is not None:
+            data = self._peek(field)
+            if data is None and not self._fetched and self._can_hydrate():
+                self._fetch()
+                data = self._peek(field)
+
+            if data is not None and key in data:
+                return _resolve_class(present_cls_name)(data)
+
+            return LazyPageRef(self, page_method, present_cls_name, data)
+
         data = self._get_embedded_field(field, key)
 
         if data is not None and key in data:
@@ -207,7 +300,10 @@ def _object_by_key_property(field, key, present_cls_name, absent_cls_name, page_
             client = get_client()
             object_id = self._peek("id")
             if client is not None and object_id is not None:
-                return getattr(client, page_method)(object_id)
+                try:
+                    return getattr(client, page_method)(object_id)
+                except TransportError as error:
+                    raise _hydration_error(self, error, page_method)
 
         if data is None:
             return None
@@ -250,6 +346,7 @@ def _property_for_spec(prop):
             prop["present_class"],
             prop["absent_class"],
             prop.get("page_method"),
+            prop.get("lazy", False),
         )
     if kind == "typed_object":
         return _typed_object_property(field, prop["type_map"])
@@ -288,7 +385,9 @@ def make_spotify_class(spec):
 def make_spotify_classes(specs):
     classes = {}
     _CLASS_REGISTRY["Page"] = Page
+    _CLASS_REGISTRY["LazyPageRef"] = LazyPageRef
     globals()["Page"] = Page
+    globals()["LazyPageRef"] = LazyPageRef
 
     for spec in specs:
         cls = make_spotify_class(spec)
@@ -300,6 +399,9 @@ def make_spotify_classes(specs):
 
 for _page_field in _PAGE_FIELDS:
     setattr(Page, _page_field, _field_property(_page_field))
+
+for _lazy_ref_field in ("href", "total"):
+    setattr(LazyPageRef, _lazy_ref_field, _field_property(_lazy_ref_field))
 
 
 make_spotify_classes(SPOTIFY_OBJECT_SPECS)

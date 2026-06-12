@@ -90,6 +90,7 @@ OBJECT_BY_KEY_OVERRIDES = {
             "present_class": "PlaylistTrackPage",
             "absent_class": "PlaylistItemsRef",
             "page_method": "playlist_items",
+            "lazy": True,
         },
     ),
 }

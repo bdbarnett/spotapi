@@ -37,13 +37,14 @@ transport helpers, read methods, selected write methods, examples, and live test
 - Live integration tests against the Spotify Web API (playlists, saved paging, artist albums, recently played)
 - 401 retry after token refresh in `SpotifyClient` request helpers
 - Offline client retry tests in `tests/test_client.py`
+- Lazy `Playlist.items` via `LazyPageRef` (metadata without fetch; load on access)
+- `HydrationError` for contextual object-layer fetch failures
 
 ## Good Next Steps
 
 - Review MicroPython and CircuitPython compatibility on-device or in their runtimes.
 - Keep the schema generator aligned with hand-curated object_by_key overrides and February 2026 endpoint removals.
 - Decide whether to package examples, keep them source-only, or move them to docs.
-- Lazy `Playlist.items` hydration and clearer object-layer error messages.
 
 ## Open Design Questions
 

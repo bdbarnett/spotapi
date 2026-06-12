@@ -692,6 +692,7 @@ SPOTIFY_OBJECT_SPECS = (
                 "present_class": "PlaylistTrackPage",
                 "absent_class": "PlaylistItemsRef",
                 "page_method": "playlist_items",
+                "lazy": True,
             },
         ),
     },

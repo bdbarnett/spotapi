@@ -27,7 +27,12 @@ The client delegates all HTTP behavior to `spotapi.transport`.
 - **`Page`** — offset paging with `items`, `__iter__`, `__len__`, and `__getitem__`.
 - **`CursorPaging`** — extends `Page` with a `cursors` field for cursor-based pages.
 - **`object_by_key`** — returns an embedded page when present, otherwise calls a
-  `page_method` on `SpotifyClient` (`playlist.items`, `artist.albums`).
+  `page_method` on `SpotifyClient` (`artist.albums`) or a `LazyPageRef`
+  (`playlist.items`). `LazyPageRef` exposes ref metadata such as `total` without
+  a network call; subscripting, `len()`, and iteration load the page.
+- **`HydrationError`** — raised when lazy fetch or `_fetch()` fails, with object
+  type, endpoint, and Dev Mode hints. The original `TransportError` is on
+  `.cause`.
 
 Types with `fetch_method` in `object_specs.py`: `Track`, `Album`, `Artist`,
 `Playlist`, `Episode`, `Show`, `Audiobook`, `Chapter`. `User` intentionally has

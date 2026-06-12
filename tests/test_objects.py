@@ -1,6 +1,7 @@
 import unittest
 
-from spotapi import AlbumPage, Artist, Page, Playlist, PlaylistTrackPage, Track, User, set_client
+from spotapi import AlbumPage, Artist, HydrationError, Page, Playlist, PlaylistTrackPage, Track, User, set_client
+from spotapi.transport import TransportError
 
 
 class _FakeClient:
@@ -121,10 +122,31 @@ class SpotifyObjectHydrationTest(unittest.TestCase):
         set_client(client)
 
         playlist = Playlist({"id": "pl1", "name": "Mine", "items": {"href": "x", "total": 1}})
-        item = playlist.items[0]
+        items = playlist.items
+        self.assertEqual(items.total, 1)
+        self.assertEqual(client.calls, [])
+
+        item = items[0]
         self.assertEqual(item.item.name, "Song")
-        self.assertEqual(client.calls[0], ("playlist", "pl1"))
-        self.assertEqual(client.calls[-1], ("playlist_items", "pl1"))
+        self.assertEqual(client.calls, [("playlist_items", "pl1")])
+
+    def test_hydration_error_includes_context(self):
+        class _FailingClient(_FakeClient):
+            def track(self, object_id):
+                self.calls.append(("track", object_id))
+                raise TransportError("HTTP status 403", 403, None)
+
+        client = _FailingClient({})
+        set_client(client)
+
+        track = Track({"id": "t1", "name": "Stub", "type": "track"})
+        with self.assertRaises(HydrationError) as context:
+            track.popularity
+
+        self.assertIn("Track", str(context.exception))
+        self.assertIn("track()", str(context.exception))
+        self.assertIn("403", str(context.exception))
+        self.assertIsInstance(context.exception.cause, TransportError)
 
     def test_page_items_uses_peek(self):
         page = Page(
