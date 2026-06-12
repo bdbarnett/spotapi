@@ -1,10 +1,9 @@
+import os
 import sys
 import termios
 import tty
 
-from _bootstrap import bootstrap
-
-bootstrap()
+sys.path.insert(0, os.getcwd())
 
 from spotapi import SpotifyClient
 

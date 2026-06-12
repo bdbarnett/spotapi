@@ -10,7 +10,7 @@ def main():
     page = client.current_user_playlists(limit=10)
 
     for playlist in page:
-        print("-", playlist.name, "tracks:", playlist.tracks.total)
+        print("-", playlist.name, "items:", playlist.items.total)
 
 
 if __name__ == "__main__":

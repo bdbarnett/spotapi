@@ -170,21 +170,39 @@ def finalize_spec(spec):
             "base": "Page",
         })
 
+    if spec["name"] == "CursorPaging":
+        return with_fetch_method({
+            "name": "CursorPaging",
+            "base": "Page",
+            "properties": (
+                {"field": "cursors", "kind": "object", "class": "Cursor"},
+            ),
+        })
+
     item = properties.get("items")
     if item is not None and item.get("kind") == "objects" and has_paging_fields(properties):
+        base = "CursorPaging" if "cursors" in properties else "Paging"
         page_spec = {
             "name": spec["name"],
-            "base": "Paging",
+            "base": base,
             "item_class": item["class"],
         }
         extra_properties = tuple(
             properties[field]
             for field in sorted(properties)
-            if field != "items" and field not in PAGING_FIELDS
+            if field != "items"
+            and field not in PAGING_FIELDS
+            and not (base == "CursorPaging" and field == "cursors")
         )
         if extra_properties:
             page_spec["properties"] = extra_properties
         return with_fetch_method(page_spec)
+
+    if has_paging_fields(properties) and "cursors" in properties:
+        return with_fetch_method({
+            "name": spec["name"],
+            "base": "CursorPaging",
+        })
 
     return with_fetch_method({
         "name": spec["name"],

@@ -126,7 +126,7 @@ chosen automatically in `spotapi.transport` from `requests` or a CircuitPython
 
 ### Playback Controls
 
-`refresh_token_playback_controls.py` is an interactive terminal demo. It prints
+`scripts/spotapi_playback.py` is an interactive terminal demo. It prints
 a key map, then loops on single keystrokes to call playback methods such as
 `play()`, `pause()`, `next_track()`, `seek()`, `volume()`, and `queue()`, plus
 parameterless read methods such as `me()`, `saved_tracks()`, and
@@ -135,7 +135,7 @@ Requires Premium and an active Spotify device for playback controls. Uses raw
 terminal input (`termios`) and is intended for Linux/WSL/macOS terminals.
 
 ```powershell
-python examples\refresh_token_playback_controls.py
+python scripts\spotapi_playback.py
 ```
 
 Many API paths use descriptive method names rather than URL paths. For example,

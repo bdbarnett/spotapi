@@ -4,6 +4,20 @@ SPOTIFY_OBJECT_SPECS = (
         "base": "Page",
     },
     {
+        "name": "Cursor",
+        "properties": (
+            {"field": "after"},
+            {"field": "before"},
+        ),
+    },
+    {
+        "name": "CursorPaging",
+        "base": "Page",
+        "properties": (
+            {"field": "cursors", "kind": "object", "class": "Cursor"},
+        ),
+    },
+    {
         "name": "ExternalUrl",
         "properties": (
             {"field": "spotify"},
@@ -84,7 +98,7 @@ SPOTIFY_OBJECT_SPECS = (
         ),
     },
     {
-        "name": "PlaylistTracksRef",
+        "name": "PlaylistItemsRef",
         "properties": (
             {"field": "href"},
             {"field": "total"},
@@ -168,29 +182,17 @@ SPOTIFY_OBJECT_SPECS = (
     },
     {
         "name": "CursorPage",
-        "properties": (
-            {"field": "href"},
-            {"field": "limit"},
-            {"field": "next"},
-            {"field": "total"},
-            {"field": "cursors", "kind": "object", "class": "Cursor"},
-        ),
+        "base": "CursorPaging",
     },
     {
         "name": "ArtistCursorPage",
-        "base": "Paging",
+        "base": "CursorPaging",
         "item_class": "Artist",
-        "properties": (
-            {"field": "cursors", "kind": "object", "class": "Cursor"},
-        ),
     },
     {
         "name": "PlayHistoryCursorPage",
-        "base": "Paging",
+        "base": "CursorPaging",
         "item_class": "PlayHistory",
-        "properties": (
-            {"field": "cursors", "kind": "object", "class": "Cursor"},
-        ),
     },
     {
         "name": "ResumePoint",
@@ -209,13 +211,6 @@ SPOTIFY_OBJECT_SPECS = (
         "name": "Narrator",
         "properties": (
             {"field": "name"},
-        ),
-    },
-    {
-        "name": "Cursor",
-        "properties": (
-            {"field": "after"},
-            {"field": "before"},
         ),
     },
     {
@@ -657,14 +652,6 @@ SPOTIFY_OBJECT_SPECS = (
                     "episode": "Episode",
                 },
             },
-            {
-                "field": "track",
-                "kind": "typed_object",
-                "type_map": {
-                    "track": "Track",
-                    "episode": "Episode",
-                },
-            },
         ),
     },
     {
@@ -684,12 +671,13 @@ SPOTIFY_OBJECT_SPECS = (
             {"field": "images", "kind": "objects", "class": "Image"},
             {"field": "owner", "kind": "object", "class": "User"},
             {
-                "field": "tracks",
+                "field": "items",
                 "kind": "object_by_key",
                 "key": "items",
                 "present_class": "PlaylistTrackPage",
-                "absent_class": "PlaylistTracksRef",
+                "absent_class": "PlaylistItemsRef",
                 "fetch": True,
+                "page_method": "playlist_items",
             },
         ),
     },
