@@ -102,6 +102,10 @@ Page-backed fields use `object_by_key` and a `page_method`:
 response. Under February 2026 Dev Mode, `GET /users/{id}` is not available; use
 `client.me()` for the authenticated user. See `PORTABILITY.md`.
 
+When hydration or lazy page load fails, the object layer raises `HydrationError`
+with object type, endpoint, and Dev Mode hints. The original `TransportError` is
+on `.cause`.
+
 Example navigation (no manual client calls in the chain):
 
 ```python
@@ -255,8 +259,8 @@ Library code can also use `TokenCache("tokens.json")` with
 python -m unittest discover -s tests -v
 ```
 
-- `tests/test_objects.py` — offline unit tests for lazy hydration, page-backed
-  properties, and `Page` behavior (no credentials or network).
+- `tests/test_objects.py` — offline unit tests for lazy hydration, `HydrationError`,
+  page-backed properties, and `Page` behavior (no credentials or network).
 - `tests/test_client.py` — offline tests for 401 retry after token refresh.
 - `tests/test_live.py` — live integration tests against the Spotify Web API
   (`me`, playlists, saved paging, `artist.albums`, recently played). Skipped
