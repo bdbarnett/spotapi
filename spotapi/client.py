@@ -38,7 +38,16 @@ from .objects import (
     User,
     set_client,
 )
-from .transport import API_BASE_URL, build_url, delete_json, get_json, post_json, put_body, put_json
+from .transport import (
+    API_BASE_URL,
+    TransportError,
+    build_url,
+    delete_json,
+    get_json,
+    post_json,
+    put_body,
+    put_json,
+)
 
 
 class SpotifyClientError(Exception):
@@ -80,21 +89,19 @@ class SpotifyClient:
             set_client(self)
 
     def _get_json(self, path, query=None):
-        token = self._access_token()
-        if token is None:
-            raise SpotifyClientError("An access_token is required for Spotify Web API requests")
+        def request(token):
+            return get_json(path, access_token=token, query=query)
 
-        return get_json(path, access_token=token, query=query)
+        return self._request_with_retry(request)
 
     def _put_json(self, path, data=None, query=None):
         return self._request_json(put_json, path, data=data, query=query)
 
     def _put_body(self, path, body, content_type, query=None):
-        token = self._access_token()
-        if token is None:
-            raise SpotifyClientError("An access_token is required for Spotify Web API requests")
+        def request(token):
+            return put_body(path, body, content_type, access_token=token, query=query)
 
-        return put_body(path, body, content_type, access_token=token, query=query)
+        return self._request_with_retry(request)
 
     def _post_json(self, path, data=None, query=None):
         return self._request_json(post_json, path, data=data, query=query)
@@ -106,11 +113,31 @@ class SpotifyClient:
         return build_url(path, query=query, base_url=self.API_BASE_URL)
 
     def _request_json(self, request, path, data=None, query=None):
+        def do_request(token):
+            return request(path, data=data, access_token=token, query=query)
+
+        return self._request_with_retry(do_request)
+
+    def _request_with_retry(self, request):
         token = self._access_token()
         if token is None:
             raise SpotifyClientError("An access_token is required for Spotify Web API requests")
 
-        return request(path, data=data, access_token=token, query=query)
+        try:
+            return request(token)
+        except TransportError as error:
+            if error.status != 401 or self.auth is None:
+                raise
+
+            self.auth.refresh()
+            if self.access_token is not None and self.auth.access_token is not None:
+                self.access_token = self.auth.access_token
+
+            token = self._access_token()
+            if token is None:
+                raise SpotifyClientError("An access_token is required for Spotify Web API requests")
+
+            return request(token)
 
     def _access_token(self):
         if self.access_token is not None:

@@ -257,8 +257,10 @@ python -m unittest discover -s tests -v
 
 - `tests/test_objects.py` — offline unit tests for lazy hydration, page-backed
   properties, and `Page` behavior (no credentials or network).
-- `tests/test_live.py` — live integration tests against the Spotify Web API.
-  Skipped when `spotapi.local.json` is missing.
+- `tests/test_client.py` — offline tests for 401 retry after token refresh.
+- `tests/test_live.py` — live integration tests against the Spotify Web API
+  (`me`, playlists, saved paging, `artist.albums`, recently played). Skipped
+  when `spotapi.local.json` is missing.
 
 ## Packaging
 

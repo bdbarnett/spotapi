@@ -34,15 +34,16 @@ transport helpers, read methods, selected write methods, examples, and live test
 - Endpoint coverage report that parses `spotapi/client.py` and compares it to OpenAPI (`--map` prints path-to-method names)
 - First-class client methods for all OpenAPI paths currently reported by Spotify's schema
 - Example scripts for client credentials, OAuth, user-library usage, playback controls, and guarded write calls
-- Live integration tests against the Spotify Web API
+- Live integration tests against the Spotify Web API (playlists, saved paging, artist albums, recently played)
+- 401 retry after token refresh in `SpotifyClient` request helpers
+- Offline client retry tests in `tests/test_client.py`
 
 ## Good Next Steps
 
-- Add more live tests for read-only user endpoints such as playlists and saved tracks.
 - Review MicroPython and CircuitPython compatibility on-device or in their runtimes.
 - Keep the schema generator aligned with hand-curated object_by_key overrides and February 2026 endpoint removals.
 - Decide whether to package examples, keep them source-only, or move them to docs.
-- Retry API requests after token refresh when Spotify returns 401.
+- Lazy `Playlist.items` hydration and clearer object-layer error messages.
 
 ## Open Design Questions
 
