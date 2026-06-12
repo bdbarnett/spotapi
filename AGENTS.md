@@ -13,17 +13,21 @@ would otherwise require the `python3.12-venv` system package, which is not part 
 codebase.) Use `python3` (there is no `python` alias on the VM).
 
 Common commands (run from repo root):
-- Tests (offline, no creds/network): `python3 -m unittest discover -s tests` — see `README.md` "Tests".
+- Tests (offline object tests always run): `python3 -m unittest discover -s tests` — see `README.md` "Tests".
 - Build (packaging = the library "build"): `python3 -m build` — see `README.md` "Packaging".
 - Lint: none configured (no ruff/mypy/flake8 config exists despite cache entries in `.gitignore`).
 
 Non-obvious notes:
-- The test suite is small; live tests are skipped without `spotapi.local.json`.
-  No Spotify credentials or network are required for tests/build.
+- `tests/test_objects.py` runs offline with no credentials or network.
+  `tests/test_live.py` is skipped without `spotapi.local.json`.
+- `scripts/spotapi_*_discovery.py` exercise the object graph live (OAuth user
+  token). `spotapi_playlist_discovery.py` requires an owned playlist.
 - `examples/*.py` and `scripts/smoke_client_credentials.py` need real Spotify
   credentials (`SPOTIFY_CLIENT_ID`/`SPOTIFY_CLIENT_SECRET`, and a refresh token /
   callback URL for user-scoped flows) and live network. They are NOT needed to
   verify the environment.
+- February 2026 Dev Mode removed `GET /users/{id}` and legacy playlist track
+  endpoints; see `PORTABILITY.md`. Do not add `fetch_method` on `User`.
 - `scripts/endpoint_coverage.py` and `scripts/generate_object_specs.py` fetch
   Spotify's OpenAPI schema from the network by default (pass a local schema path to
   run offline); `generate_object_specs.py` only needs `PyYAML` (the `schema` extra)

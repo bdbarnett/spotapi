@@ -69,6 +69,44 @@ FETCH_METHODS = {
 
 PAGING_FIELDS = ("href", "limit", "next", "offset", "previous", "total")
 
+# Hand-curated page-backed properties. The OpenAPI artist/playlist objects do not
+# describe these fields; spotapi wires them to client page methods instead.
+OBJECT_BY_KEY_OVERRIDES = {
+    "Artist": (
+        {
+            "field": "albums",
+            "kind": "object_by_key",
+            "key": "items",
+            "present_class": "AlbumPage",
+            "absent_class": "AlbumsRef",
+            "page_method": "artist_albums",
+        },
+    ),
+    "Playlist": (
+        {
+            "field": "items",
+            "kind": "object_by_key",
+            "key": "items",
+            "present_class": "PlaylistTrackPage",
+            "absent_class": "PlaylistItemsRef",
+            "page_method": "playlist_items",
+        },
+    ),
+}
+
+# Spotify February 2026 Dev Mode removed paths (documented in PORTABILITY.md).
+# Do not add fetch_method: "user"; GET /users/{id} is not available in Dev Mode.
+FEB_2026_REMOVED_PATHS = (
+    "GET /users/{id}",
+    "GET /users/{id}/playlists",
+    "GET /playlists/{id}/tracks",
+    "POST /users/{user_id}/playlists",
+    "POST /playlists/{id}/tracks",
+    "PUT /playlists/{id}/tracks",
+    "DELETE /playlists/{id}/tracks",
+    "GET /markets",
+)
+
 
 def main():
     parser = argparse.ArgumentParser(description="Generate draft Spotify object specs from the OpenAPI schema.")
@@ -156,9 +194,25 @@ def build_specs(schema):
     specs = []
     for name in sorted(specs_by_name):
         spec = specs_by_name[name]
-        specs.append(finalize_spec(spec))
+        specs.append(apply_property_overrides(finalize_spec(spec)))
 
     return tuple(specs)
+
+
+def apply_property_overrides(spec):
+    overrides = OBJECT_BY_KEY_OVERRIDES.get(spec.get("name"))
+    if overrides is None:
+        return spec
+
+    properties = {}
+    for prop in spec.get("properties", ()):
+        properties[prop["field"]] = prop
+    for prop in overrides:
+        properties[prop["field"]] = prop
+
+    updated = dict(spec)
+    updated["properties"] = tuple(properties[field] for field in sorted(properties))
+    return updated
 
 
 def finalize_spec(spec):
@@ -348,6 +402,15 @@ def schema_to_class_name(schema_name):
 def write_specs(path, specs):
     with open(path, "w", encoding="utf-8") as file:
         file.write("# Generated draft. Review before copying into spotapi.object_specs.\n")
+        file.write("#\n")
+        file.write("# Hydration: do not emit per-field fetch flags. Types in FETCH_METHODS\n")
+        file.write("# hydrate missing fields via SpotifyObject._get(); page-backed fields\n")
+        file.write("# use object_by_key + page_method (see OBJECT_BY_KEY_OVERRIDES).\n")
+        file.write("# Cursor paging types use base CursorPaging (extends Page + cursors).\n")
+        file.write("#\n")
+        file.write("# February 2026 Dev Mode removed paths (see PORTABILITY.md):\n")
+        for removed_path in FEB_2026_REMOVED_PATHS:
+            file.write("#   - {}\n".format(removed_path))
         file.write("SPOTIFY_OBJECT_SPECS = ")
         file.write(pprint.pformat(specs, width=120))
         file.write("\n")

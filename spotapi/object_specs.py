@@ -105,6 +105,13 @@ SPOTIFY_OBJECT_SPECS = (
         ),
     },
     {
+        "name": "AlbumsRef",
+        "properties": (
+            {"field": "href"},
+            {"field": "total"},
+        ),
+    },
+    {
         "name": "SnapshotResult",
         "properties": (
             {"field": "snapshot_id"},
@@ -444,6 +451,14 @@ SPOTIFY_OBJECT_SPECS = (
             {"field": "genres", "kind": "tuple"},
             {"field": "images", "kind": "objects", "class": "Image"},
             {"field": "popularity"},
+            {
+                "field": "albums",
+                "kind": "object_by_key",
+                "key": "items",
+                "present_class": "AlbumPage",
+                "absent_class": "AlbumsRef",
+                "page_method": "artist_albums",
+            },
         ),
     },
     {

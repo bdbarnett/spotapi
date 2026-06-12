@@ -5,9 +5,10 @@ Small Spotify Web API client experiments for CPython, MicroPython, and CircuitPy
 The current focus is a lightweight object layer:
 
 - Dict-backed Spotify objects
-- Lazy hydration from simplified objects to full objects
-- Spec-driven class creation
-- Generic page navigation helpers
+- Lazy hydration: any missing field on a fetchable type triggers `fetch_method` hydration
+- Page-backed properties (`playlist.items`, `artist.albums`) call client page methods when needed
+- Spec-driven class creation (`Page`, `CursorPaging`, and typed nested objects)
+- Generic page navigation (`for item in page`, `page[0]`, `next_page(page)`)
 - Manual bearer token, Client Credentials auth, and Authorization Code auth helpers
 - Local config files for app credentials and optional write-example settings
 - `SpotifyClient()` loads config and runs browser OAuth on first use when needed
@@ -84,6 +85,55 @@ client = SpotifyClient(
 client = SpotifyClient(auth=AuthorizationCodeAuth(...))
 client = SpotifyClient(access_token="...")
 ```
+
+## Object Layer
+
+Spotify objects are dict-backed wrappers generated from `SPOTIFY_OBJECT_SPECS`.
+Property access reads embedded JSON first; when a field is absent on a type with
+`fetch_method` (`Track`, `Album`, `Artist`, `Playlist`, and so on), the object
+hydrates once via the matching `SpotifyClient` getter.
+
+Page-backed fields use `object_by_key` and a `page_method`:
+
+- `playlist.items` → `playlist_items()` (`GET /playlists/{id}/items`)
+- `artist.albums` → `artist_albums()` (`GET /artists/{id}/albums`)
+
+`User` and other non-fetchable types only expose fields present in the embedding
+response. Under February 2026 Dev Mode, `GET /users/{id}` is not available; use
+`client.me()` for the authenticated user. See `PORTABILITY.md`.
+
+Example navigation (no manual client calls in the chain):
+
+```python
+playlist = client.current_user_playlists()[0]
+track = playlist.items[0].item
+artist = track.artists[0]
+album = artist.albums[0]
+
+print(playlist.name, track.name, artist.name, album.name)
+```
+
+## Discovery Scripts
+
+Run from the project root after `spotapi.local.json` is configured. Each script
+adds `os.getcwd()` to `sys.path` and calls `SpotifyClient()` with no arguments.
+
+```powershell
+python scripts\spotapi_simpletest.py
+python scripts\spotapi_playlist_discovery.py
+python scripts\spotapi_album_discovery.py
+python scripts\spotapi_saved_discovery.py
+```
+
+| Script | Object graph exercised |
+|--------|------------------------|
+| `spotapi_simpletest.py` | `PrivateUser` via `me()` |
+| `spotapi_playlist_discovery.py` | Owned playlist → `items` → track → artist → `artist.albums[0]` |
+| `spotapi_album_discovery.py` | Saved track → album → `tracks` paging and lazy album fields |
+| `spotapi_saved_discovery.py` | `SavedTrack` / `SavedAlbum` wrappers and `next_page()` |
+
+`spotapi_playlist_discovery.py` skips followed playlists (Spotify returns 403 on
+`playlist_items` when the user is not the owner or a collaborator).
 
 ## Smoke Tests
 
@@ -201,14 +251,14 @@ Library code can also use `TokenCache("tokens.json")` with
 
 ## Tests
 
-Tests are live integration tests against the Spotify Web API. Create
-`spotapi.local.json` first, then run:
-
 ```powershell
 python -m unittest discover -s tests -v
 ```
 
-If the config file is missing, the tests are skipped.
+- `tests/test_objects.py` — offline unit tests for lazy hydration, page-backed
+  properties, and `Page` behavior (no credentials or network).
+- `tests/test_live.py` — live integration tests against the Spotify Web API.
+  Skipped when `spotapi.local.json` is missing.
 
 ## Packaging
 
@@ -234,6 +284,11 @@ python scripts\generate_object_specs.py
 The default output is `generated_object_specs.py`, which is ignored by Git and
 kept outside the import package. YAML schemas require optional `PyYAML`; JSON
 OpenAPI schemas work with the standard library.
+
+The generator emits `CursorPaging` for cursor pages, merges hand-curated
+`object_by_key` overrides (`Artist.albums`, `Playlist.items`), documents February
+2026 removed paths in the output header, and does not emit per-field `fetch`
+flags (hydration is driven by `fetch_method` on fetchable types).
 
 ## Endpoint Coverage
 
@@ -277,6 +332,10 @@ Some playback controls require Spotify Premium and an active device.
 - User-specific endpoints need a user access token; Client Credentials is not enough.
 - HTTP requires `requests` on CPython and MicroPython, or a CircuitPython
   `adafruit_requests` session.
+- **February 2026 Dev Mode** — several endpoints are removed or return 403
+  (for example `GET /users/{id}`, legacy `playlist_tracks`). Use `client.me()`
+  for the current user and `playlist.items` for playlist entries. See
+  `PORTABILITY.md` for details.
 
 See `ROADMAP.md` for implemented areas, next steps, and open design questions.
 See `PORTABILITY.md` for CPython, MicroPython, and CircuitPython boundary notes.

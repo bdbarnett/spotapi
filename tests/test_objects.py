@@ -1,6 +1,6 @@
 import unittest
 
-from spotapi import Page, Playlist, PlaylistTrackPage, Track, User, set_client
+from spotapi import AlbumPage, Artist, Page, Playlist, PlaylistTrackPage, Track, User, set_client
 
 
 class _FakeClient:
@@ -57,6 +57,34 @@ class SpotifyObjectHydrationTest(unittest.TestCase):
         repr(track)
         self.assertFalse(track._fetched)
         self.assertEqual(client.calls, [])
+
+    def test_artist_albums_uses_page_method(self):
+        class _ArtistClient(_FakeClient):
+            def artist(self, object_id):
+                self.calls.append(("artist", object_id))
+                return Artist({"id": object_id, "name": "Artist", "type": "artist"})
+
+            def artist_albums(self, object_id):
+                self.calls.append(("artist_albums", object_id))
+                return AlbumPage(
+                    {
+                        "href": "albums",
+                        "limit": 1,
+                        "next": None,
+                        "offset": 0,
+                        "previous": None,
+                        "total": 1,
+                        "items": [{"id": "a1", "name": "Album", "type": "album"}],
+                    }
+                )
+
+        client = _ArtistClient({})
+        set_client(client)
+
+        artist = Artist({"id": "ar1", "name": "Artist", "type": "artist"})
+        self.assertEqual(artist.albums[0].name, "Album")
+        self.assertEqual(client.calls[0], ("artist", "ar1"))
+        self.assertEqual(client.calls[-1], ("artist_albums", "ar1"))
 
     def test_playlist_items_ref_uses_page_method(self):
         class _PlaylistClient(_FakeClient):

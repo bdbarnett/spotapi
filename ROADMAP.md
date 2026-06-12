@@ -7,7 +7,12 @@ transport helpers, read methods, selected write methods, examples, and live test
 
 - Spec-driven Spotify object classes from `SPOTIFY_OBJECT_SPECS`
 - Nested object wrapping for object, object list, typed object, and page fields
-- Lazy hydration from simplified objects to full objects
+- Lazy hydration from simplified objects to full objects (`_get` / `_peek`)
+- `Page.__getitem__`, `CursorPaging`, and page-backed `object_by_key` properties
+- `Artist.albums` and `Playlist.items` wired to client page methods
+- Discovery scripts (`spotapi_*_discovery.py`) for object-graph walkthroughs
+- Offline object-layer unit tests in `tests/test_objects.py`
+- February 2026 Dev Mode API notes in `PORTABILITY.md`
 - `SpotifyObject.__str__()` pretty-prints raw object data for `print()`
 - Client Credentials auth
 - Authorization Code auth helpers consolidated in `spotapi.auth`
@@ -35,7 +40,7 @@ transport helpers, read methods, selected write methods, examples, and live test
 
 - Add more live tests for read-only user endpoints such as playlists and saved tracks.
 - Review MicroPython and CircuitPython compatibility on-device or in their runtimes.
-- Improve the schema generator's heuristics for fetch flags and hand-curated field overrides.
+- Keep the schema generator aligned with hand-curated object_by_key overrides and February 2026 endpoint removals.
 - Decide whether to package examples, keep them source-only, or move them to docs.
 - Retry API requests after token refresh when Spotify returns 401.
 

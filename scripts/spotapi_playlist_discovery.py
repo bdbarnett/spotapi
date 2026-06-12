@@ -35,7 +35,7 @@ artist = track.artists[0]
 print("artist.name:", artist.name)
 print("artist.genres:", artist.genres)
 
-album = track.album
+album = artist.albums[0]
 print("album.name:", album.name)
 print("album.label:", album.label)
 album_tracks = album.tracks
