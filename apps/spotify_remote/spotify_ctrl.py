@@ -1,6 +1,8 @@
-from spotapi import (
+# MicroPython cannot import names re-exported from spotapi/__init__.py; use submodules.
+import os
+
+from spotapi.auth import (
     AuthorizationCodeAuth,
-    SpotifyClient,
     TokenCache,
     credentials_from_config,
     load_config,
@@ -10,6 +12,7 @@ from spotapi import (
     PLAYLIST_READ_SCOPES,
     USER_PROFILE_SCOPES,
 )
+from spotapi.client import SpotifyClient
 
 SCOPES = (
     USER_PROFILE_SCOPES
@@ -19,11 +22,31 @@ SCOPES = (
 )
 
 
+def _app_dir():
+    try:
+        path = __file__
+        if "/" in path:
+            return path.rsplit("/", 1)[0]
+    except NameError:
+        pass
+    return os.getcwd()
+
+
+def _join_dir(directory, name):
+    if directory.endswith("/"):
+        return directory + name
+    return directory + "/" + name
+
+
+CONFIG_PATH = _join_dir(_app_dir(), "spotapi.local.json")
+TOKEN_PATH = _join_dir(_app_dir(), "tokens.json")
+
+
 class SpotifyController:
     def __init__(self):
-        config = load_config()
+        config = load_config(CONFIG_PATH)
         client_id, client_secret = credentials_from_config(config)
-        cache = TokenCache("tokens.json")
+        cache = TokenCache(TOKEN_PATH)
         auth = AuthorizationCodeAuth(
             client_id,
             client_secret,

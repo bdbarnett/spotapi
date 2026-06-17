@@ -65,13 +65,13 @@ class SpotifyUI:
 
         self.track_label = lv.label(self.now_panel)
         self.track_label.set_width(WIDTH - 64)
-        self.track_label.set_long_mode(lv.label.LONG_MODE.DOTS)
+        self.track_label.set_long_mode(lv.label.LONG.DOT)
         self.track_label.set_text("—")
         self.track_label.align(lv.ALIGN.TOP_MID, 0, 24)
 
         self.artist_label = lv.label(self.now_panel)
         self.artist_label.set_width(WIDTH - 64)
-        self.artist_label.set_long_mode(lv.label.LONG_MODE.DOTS)
+        self.artist_label.set_long_mode(lv.label.LONG.DOT)
         self.artist_label.set_text("")
         self.artist_label.set_style_text_color(_hex(MUTED), 0)
         self.artist_label.align(lv.ALIGN.TOP_MID, 0, 64)
@@ -108,7 +108,7 @@ class SpotifyUI:
 
         self.status_label = lv.label(self.now_panel)
         self.status_label.set_width(WIDTH - 64)
-        self.status_label.set_long_mode(lv.label.LONG_MODE.DOTS)
+        self.status_label.set_long_mode(lv.label.LONG.DOT)
         self.status_label.set_text("")
         self.status_label.set_style_text_color(_hex(MUTED), 0)
         self.status_label.align(lv.ALIGN.BOTTOM_MID, 0, -8)
