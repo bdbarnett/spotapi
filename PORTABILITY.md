@@ -16,6 +16,10 @@ memory:
 
 The client delegates all HTTP behavior to `spotapi.transport`.
 
+On MicroPython, import submodules directly (`from spotapi.auth import ...`,
+`from spotapi.client import SpotifyClient`) rather than re-exports from
+`spotapi/__init__.py`, which may not resolve on constrained runtimes.
+
 ## Object Layer
 
 `spotapi.objects` builds spec-driven classes at import time:
@@ -45,9 +49,12 @@ no `fetch_method` because `GET /users/{id}` is unavailable in Dev Mode.
 - Automatic HTTP backend selection through `_find_requests()`
 - `requests` on CPython and MicroPython
 - A CircuitPython `adafruit_requests` session when `requests` is not available
-- JSON request/response handling
+- JSON request/response handling via `response_json()` (including empty success
+  bodies and non-JSON error bodies)
+- Binary downloads via `get_bytes()` and `response_bytes()`
 - Form encoding and URL query encoding
 - Raw body uploads
+- Bodyless POST/PUT/PATCH/DELETE requests send `Content-Length: 0`
 - Response cleanup through `close()` or `deinit()`
 
 When `spotapi.transport` is imported, it sets `requests = _find_requests()`.
@@ -76,8 +83,10 @@ If a runtime does not provide one of those modules, the relevant helper raises
 - `TokenCache` for saving OAuth tokens to `tokens.json`
 - Interactive browser OAuth helpers such as `authorize_with_local_server()`
 
-Those helpers import `json`, local file I/O, `http.server`, or `webbrowser` only
-when they run. On constrained devices, construct `AuthorizationCodeAuth` or
+Those helpers import `json`, local file I/O, `http.server`, `socket`/`usocket`,
+or `webbrowser` only when they run. `wait_for_oauth_callback()` uses
+`http.server` when available and falls back to `wait_for_oauth_callback_socket()`
+otherwise. On constrained devices, construct `AuthorizationCodeAuth` or
 `SpotifyClient` directly with in-memory tokens instead.
 
 ## Config-Based Client
@@ -109,7 +118,7 @@ layers without the local config file or interactive OAuth helpers.
 | Runtime | Environment | Status |
 |---------|-------------|--------|
 | CPython | Linux / WSL / desktop | Primary development target |
-| MicroPython | Linux (UNIX port) | Validated with discovery scripts |
+| MicroPython | Linux (UNIX port) | Validated with discovery scripts and `apps/spotify_remote` (pydisplay) |
 | MicroPython | Embedded hardware | Not yet validated |
 | CircuitPython | Embedded hardware | Not yet validated |
 

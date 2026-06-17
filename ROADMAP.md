@@ -39,7 +39,11 @@ transport helpers, read methods, selected write methods, examples, and live test
 - Offline client retry tests in `tests/test_client.py`
 - Lazy `Playlist.items` via `LazyPageRef` (metadata without fetch; load on access)
 - `HydrationError` for contextual object-layer fetch failures
-- MicroPython on Linux validated with discovery scripts
+- MicroPython on Linux validated with discovery scripts and the `spotify_remote` app
+- `spotify_remote` LVGL MicroPython app (`apps/spotify_remote/`)
+- `transport.get_bytes()` for binary downloads (for example cover art)
+- Socket-based OAuth callback fallback for MicroPython
+- Offline transport tests in `tests/test_transport.py`
 
 ## Good Next Steps
 

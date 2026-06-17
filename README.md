@@ -253,6 +253,16 @@ For most use, prefer `SpotifyClient()` instead of the manual OAuth flow.
 Library code can also use `TokenCache("tokens.json")` with
 `AuthorizationCodeAuth` to load and save access/refresh token data directly.
 
+## Applications
+
+[`apps/spotify_remote/`](apps/spotify_remote/) is an LVGL MicroPython touch UI
+for playback control, library browse, queue, search, and cover art. It uses
+`spotapi` on MicroPython and is developed on the UNIX port with
+[pydisplay](https://github.com/lvgl-micropython/lvgl_micropython). See
+[`apps/spotify_remote/README.md`](apps/spotify_remote/README.md) for setup;
+`spotapi.local.json` and `tokens.json` live in the app directory, not the repo
+root.
+
 ## Tests
 
 ```powershell
@@ -262,6 +272,7 @@ python -m unittest discover -s tests -v
 - `tests/test_objects.py` — offline unit tests for lazy hydration, `HydrationError`,
   page-backed properties, and `Page` behavior (no credentials or network).
 - `tests/test_client.py` — offline tests for 401 retry after token refresh.
+- `tests/test_transport.py` — offline transport response/error and bodyless POST tests.
 - `tests/test_live.py` — live integration tests against the Spotify Web API
   (`me`, playlists, saved paging, `artist.albums`, recently played). Skipped
   when `spotapi.local.json` is missing.
@@ -315,7 +326,8 @@ the URL path.
 The client currently includes object-returning methods for:
 
 - Single and bulk tracks, albums, artists, episodes, shows, audiobooks, and chapters
-- Album tracks, artist albums, artist top tracks, related artists, playlist items/tracks, show episodes, and audiobook chapters
+- Album tracks, artist albums, related artists, playlist items/tracks, show episodes, and audiobook chapters
+- Artist top tracks (unavailable in February 2026 Dev Mode; see `PORTABILITY.md`)
 - Audio features, audio analysis, recommendations, search, categories, category playlists, featured playlists, and new releases
 - Current playback, currently playing, queue, devices, recently played, current user, public users, and user playlists
 - Saved albums, tracks, episodes, shows, audiobooks, followed artists, top artists/tracks, markets, and recommendation genres
@@ -334,7 +346,9 @@ Some playback controls require Spotify Premium and an active device.
 
 ## Current Limitations
 
-- Interactive browser OAuth uses CPython `http.server` and `webbrowser`.
+- Interactive browser OAuth uses CPython `http.server` and `webbrowser` when
+  available; MicroPython falls back to a raw-socket callback listener (see
+  `PORTABILITY.md`).
 - User-specific endpoints need a user access token; Client Credentials is not enough.
 - HTTP requires `requests` on CPython and MicroPython, or a CircuitPython
   `adafruit_requests` session.

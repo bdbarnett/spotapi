@@ -60,6 +60,10 @@ class SpotifyLiveTest(unittest.TestCase):
         self.assertGreater(len(artist.albums), 0)
         self.assertIsNotNone(artist.albums[0].name)
 
+        albums_page = client.artist_albums(artist.id, limit=10)
+        self.assertGreater(len(albums_page), 0)
+        self.assertIsNotNone(albums_page[0].name)
+
     def test_saved_tracks_page(self):
         from spotapi import SpotifyClient
 

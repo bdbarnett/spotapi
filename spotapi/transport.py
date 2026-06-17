@@ -49,6 +49,19 @@ def get_json(path_or_url, access_token=None, query=None, headers=None, base_url=
     return response_json(response)
 
 
+def get_bytes(path_or_url, access_token=None, query=None, headers=None, base_url=API_BASE_URL):
+    url = build_url(path_or_url, query=query, base_url=base_url)
+    request_headers = {}
+
+    if headers:
+        request_headers.update(headers)
+    if access_token is not None:
+        request_headers["Authorization"] = "Bearer " + access_token
+
+    response = requests.get(url, headers=request_headers)
+    return response_bytes(response)
+
+
 def post_form_json(url, data, headers=None):
     request_headers = {"Content-Type": "application/x-www-form-urlencoded"}
     if headers:
@@ -108,6 +121,11 @@ def request_body(method, path_or_url, body, content_type, access_token=None, que
 
 def http_request(method, url, body, headers):
     method_name = method.lower()
+    if body is None and method_name in ("post", "put", "patch", "delete"):
+        if "Content-Length" not in headers:
+            headers["Content-Length"] = "0"
+        body = ""
+
     if hasattr(requests, method_name):
         request_method = getattr(requests, method_name)
         if body is None:
@@ -121,12 +139,32 @@ def http_request(method, url, body, headers):
 
 
 def response_json(response):
+    data = None
     try:
         status = response_status(response)
         if status == 204:
             return None
 
-        data = parse_response_json(response, status=status)
+        try:
+            data = parse_response_json(response, status=status)
+        except ValueError:
+            if status is not None and (status < 200 or status >= 300):
+                data = _response_error_data(response)
+                raise TransportError("HTTP status {}".format(status), status, data)
+            raise
+    finally:
+        close_response(response)
+
+    if status is not None and (status < 200 or status >= 300):
+        raise TransportError("HTTP status {}".format(status), status, data)
+
+    return data
+
+
+def response_bytes(response):
+    try:
+        status = response_status(response)
+        data = read_response_bytes(response)
     finally:
         close_response(response)
 
@@ -167,11 +205,32 @@ def read_response_text(response):
     return ""
 
 
+def read_response_bytes(response):
+    if hasattr(response, "content"):
+        content = response.content
+        if isinstance(content, str):
+            content = content.encode("utf-8")
+        return content
+
+    if hasattr(response, "read"):
+        data = response.read()
+        if isinstance(data, str):
+            data = data.encode("utf-8")
+        return data
+
+    if hasattr(response, "text"):
+        return response.text.encode("utf-8")
+
+    return b""
+
+
 def parse_response_json(response, status=None):
     if hasattr(response, "json"):
         try:
             return response.json()
         except ValueError:
+            if _empty_response_body(response):
+                return None
             if _successful_status(status):
                 return None
             raise
@@ -189,6 +248,22 @@ def parse_response_json(response, status=None):
             raise
 
     return response
+
+
+def _empty_response_body(response):
+    body = read_response_text(response)
+    return not body or not body.strip()
+
+
+def _response_error_data(response):
+    body = read_response_text(response)
+    if not body or not body.strip():
+        return None
+
+    try:
+        return json_loads(body)
+    except ValueError:
+        return body
 
 
 def _successful_status(status):

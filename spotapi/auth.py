@@ -657,10 +657,8 @@ def try_open_browser(url):
 def wait_for_oauth_callback(host, port, message, redirect_uri):
     try:
         from http.server import BaseHTTPRequestHandler, HTTPServer
-    except ImportError as error:
-        raise SpotifyAuthError(
-            "Interactive OAuth requires http.server, which is not available on this runtime"
-        ) from error
+    except ImportError:
+        return wait_for_oauth_callback_socket(host, port, message, redirect_uri)
 
     class CallbackHandler(BaseHTTPRequestHandler):
         callback_url = None
@@ -693,10 +691,64 @@ def wait_for_oauth_callback(host, port, message, redirect_uri):
     return CallbackHandler.callback_url
 
 
+def wait_for_oauth_callback_socket(host, port, message, redirect_uri):
+    try:
+        import socket as socket_mod
+    except ImportError:
+        try:
+            import usocket as socket_mod
+        except ImportError as error:
+            raise SpotifyAuthError(
+                "Interactive OAuth requires http.server or socket, which is not "
+                "available on this runtime"
+            ) from error
+
+    callback_url = None
+    addr = socket_mod.getaddrinfo(host, port)[0][-1]
+    sock = socket_mod.socket()
+    sock.setsockopt(socket_mod.SOL_SOCKET, socket_mod.SO_REUSEADDR, 1)
+    sock.bind(addr)
+    sock.listen(1)
+
+    try:
+        conn, _addr = sock.accept()
+        try:
+            request = conn.recv(2048)
+            if request:
+                first_line = request.split(b"\r\n", 1)[0]
+                parts = first_line.split(b" ")
+                if len(parts) >= 2:
+                    path = parts[1].decode()
+                    callback_url = "http://{}:{}{}".format(host, port, path)
+            body = message.encode("utf-8")
+            response = (
+                "HTTP/1.0 200 OK\r\n"
+                "Content-Type: text/plain\r\n"
+                "Content-Length: {}\r\n"
+                "\r\n"
+            ).format(len(body)).encode() + body
+            conn.send(response)
+        finally:
+            conn.close()
+    finally:
+        sock.close()
+
+    if callback_url is None:
+        raise SpotifyAuthError(
+            "No OAuth callback was received at {}. "
+            "If the browser could not reach localhost, copy the full redirect URL "
+            "into spotapi.local.json as callback_url and run "
+            "examples/authorization_code_pkce_exchange.py.".format(redirect_uri)
+        )
+
+    return callback_url
+
+
 def running_on_wsl():
     import os
 
-    if os.environ.get("WSL_DISTRO_NAME"):
+    environ = getattr(os, "environ", None)
+    if environ is not None and environ.get("WSL_DISTRO_NAME"):
         return True
 
     try:

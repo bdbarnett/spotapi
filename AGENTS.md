@@ -4,7 +4,8 @@
 
 `spotapi` is a single, pure-Python (stdlib-only) Spotify Web API **client library**
 targeting CPython/MicroPython/CircuitPython. There are no servers, databases, or
-background services to run — it is a library plus `tests/`, `examples/`, and `scripts/`.
+background services to run — it is a library plus `tests/`, `examples/`, `scripts/`,
+and `apps/` (for example `apps/spotify_remote/`).
 
 The startup update script installs the package editable into the system Python with
 `pip install --break-system-packages -e ".[schema]"` plus `build`. (`--break-system-packages`
@@ -18,7 +19,7 @@ Common commands (run from repo root):
 - Lint: none configured (no ruff/mypy/flake8 config exists despite cache entries in `.gitignore`).
 
 Non-obvious notes:
-- `tests/test_objects.py` runs offline with no credentials or network.
+- `tests/test_objects.py` and `tests/test_transport.py` run offline with no credentials or network.
   `tests/test_live.py` is skipped without `spotapi.local.json`.
 - `scripts/spotapi_*_discovery.py` exercise the object graph live (OAuth user
   token). `spotapi_playlist_discovery.py` requires an owned playlist.
@@ -37,5 +38,7 @@ Non-obvious notes:
   before constructing `SpotifyClient`.
 - MicroPython on Linux is validated; embedded MicroPython and CircuitPython on
   hardware are still outstanding. See `PORTABILITY.md` "Runtime Validation".
+- `apps/spotify_remote/` requires MicroPython, LVGL, and pydisplay (or board
+  drivers); it is not needed to verify the library on the VM.
 - Object hydration uses the global client (`set_client()`); per-object clients
   are not planned.
