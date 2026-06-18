@@ -71,9 +71,10 @@ Restart the app after changing `config.py`.
 
 ## Linux (MicroPython unix port)
 
-With **pydisplay**, `import display_driver` starts the LVGL event loop via
-`lv_utils`; no `TaskHandler` or blocking refresh loop is required on Linux.
-Import the app from the REPL after display init:
+With **pydisplay** on MicroPython unix, `import display_driver` starts the LVGL
+event loop via `lv_utils`; importing the app from the REPL returns to `>>>` while
+the timer keeps the UI alive. On CircuitPython unix (desktop SDL), apps block in
+`display_driver.run()` instead.
 
 ```bash
 cd /path/to/pydisplay/src
@@ -83,7 +84,7 @@ lv -i lib/path.py
 
 For **lvgl_micropython** (without pydisplay), build with SDL display and pointer
 input, initialize drivers before importing `ui`, then run with a `TaskHandler`
-(`th`) in scope — see that project's unix example.
+in scope — see that project's unix example.
 
 ## Hardware (ESP32 and other MCUs)
 

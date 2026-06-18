@@ -69,14 +69,15 @@ def _run_event_loop():
     try:
         import lv_utils
 
-        loop = lv_utils.event_loop.current_instance()
+        if lv_utils.event_loop.is_running():
+            lv_utils.event_loop.current_instance().run()
+            return
     except ImportError:
-        loop = None
-    if loop is not None:
-        loop.run()
-        return
-    while True:
-        th.async_refresh()
+        pass
+
+    import display_driver
+
+    display_driver.run()
 
 
 _run_event_loop()
