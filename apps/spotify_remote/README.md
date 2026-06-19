@@ -102,7 +102,7 @@ Display init must complete before `SpotifyUI` is created.
 
 - **Now** — cover art, track/artist/album metadata, **+PL** / **Like**,
   artist **Albums** / **Follow**, album **Save**, progress slider (drag to seek),
-  full-width volume slider, transport (prev, ±15s, play/pause, next),
+  volume button (bottom-right, opens vertical slider popup), transport (prev, ±15s, play/pause, next),
   shuffle/repeat chips, and status messages
 - **Library** (footer) — hub with **Songs**, **Artists**, **Albums**, **Playlists**,
   **Episodes**, **Shows**, and **Audiobooks**;

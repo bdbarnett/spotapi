@@ -225,6 +225,14 @@ def _raise_back_button(btn):
         pass
 
 
+def _volume_btn_symbol():
+    for name in ("VOLUME_MAX", "AUDIO"):
+        symbol = getattr(lv.SYMBOL, name, None)
+        if symbol:
+            return symbol
+    return "Vol"
+
+
 class SpotifyUI:
     def __init__(self, controller, on_poll):
         self.controller = controller
@@ -258,6 +266,9 @@ class SpotifyUI:
         self._loading_panel = None
         self._seek_hold_until = 0
         self._volume_slider_busy = False
+        self._volume_popup_visible = False
+        self._volume_hide_timer = None
+        self._last_volume = 50
         self._library_hub_buttons = {}
         self._auth_ok = True
         self._pending_after_device = None
@@ -494,17 +505,9 @@ class SpotifyUI:
         self.time_label.set_text("0:00 / 0:00")
         self.time_label.align(lv.ALIGN.TOP_LEFT, details_x, 218)
 
-        self.volume_slider = lv.slider(self.now_panel)
-        self.volume_slider.set_size(progress_width, slider_track_h)
-        self.volume_slider.align(lv.ALIGN.TOP_LEFT, details_x, 236)
-        self.volume_slider.set_range(0, 100)
-        self.volume_slider.set_value(50, lv.ANIM.OFF)
-        _style_slim_slider(self.volume_slider)
-        self.volume_slider.add_event_cb(self._on_volume_slider, lv.EVENT.RELEASED, None)
-
         btn_row = lv.obj(self.now_panel)
         btn_row.set_size(progress_width, btn_row_height)
-        btn_row.align(lv.ALIGN.TOP_LEFT, details_x, 262)
+        btn_row.align(lv.ALIGN.TOP_LEFT, details_x, 236)
         btn_row.set_style_bg_opa(lv.OPA.TRANSP, 0)
         btn_row.set_style_border_width(0, 0)
         btn_row.set_style_pad_all(0, 0)
@@ -546,7 +549,7 @@ class SpotifyUI:
 
         aux_row = lv.obj(self.now_panel)
         aux_row.set_size(progress_width, aux_btn_h + 12)
-        aux_row.align(lv.ALIGN.TOP_LEFT, details_x, 340)
+        aux_row.align(lv.ALIGN.TOP_LEFT, details_x, 314)
         aux_row.set_style_bg_opa(lv.OPA.TRANSP, 0)
         aux_row.set_style_border_width(0, 0)
         aux_row.set_style_pad_all(0, 0)
@@ -569,6 +572,47 @@ class SpotifyUI:
         self.status_label.set_text("")
         self.status_label.set_style_text_color(_hex(MUTED), 0)
         self.status_label.align(lv.ALIGN.BOTTOM_MID, 0, -8)
+
+        vol_btn_size = 44
+        vol_pad = 8
+        vol_slider_w = 20
+        vol_slider_h = min(160, content_height - 80)
+        popup_w = vol_slider_w + vol_pad * 2
+        popup_h = vol_slider_h + vol_pad * 2
+
+        self.volume_btn = lv.button(self.now_panel)
+        self.volume_btn.set_size(vol_btn_size, vol_btn_size)
+        self.volume_btn.align(lv.ALIGN.BOTTOM_RIGHT, -12, -8)
+        _style_transport_secondary(self.volume_btn, vol_btn_size)
+        self.volume_btn_label = lv.label(self.volume_btn)
+        self.volume_btn_label.set_text(_volume_btn_symbol())
+        self.volume_btn_label.set_style_text_color(_hex(TEXT), 0)
+        self.volume_btn_label.center()
+        self.volume_btn.add_event_cb(self._on_volume_btn, lv.EVENT.CLICKED, None)
+
+        self.volume_popup = lv.obj(self.now_panel)
+        self.volume_popup.set_size(popup_w, popup_h)
+        self.volume_popup.set_style_bg_color(_hex(PANEL), 0)
+        self.volume_popup.set_style_radius(8, 0)
+        self.volume_popup.set_style_border_width(1, 0)
+        self.volume_popup.set_style_border_color(_hex(BORDER), 0)
+        self.volume_popup.set_style_pad_all(vol_pad, 0)
+        self.volume_popup.remove_flag(lv.obj.FLAG.CLICKABLE)
+        self.volume_popup.add_flag(lv.obj.FLAG.HIDDEN)
+
+        self.volume_slider = lv.slider(self.volume_popup)
+        self.volume_slider.set_size(vol_slider_w, vol_slider_h)
+        self.volume_slider.align(lv.ALIGN.CENTER, 0, 0)
+        self.volume_slider.set_range(0, 100)
+        self.volume_slider.set_value(50, lv.ANIM.OFF)
+        if hasattr(self.volume_slider, "set_orientation") and hasattr(lv, "SLIDER_ORIENTATION"):
+            self.volume_slider.set_orientation(lv.SLIDER_ORIENTATION.VERTICAL)
+        _style_slim_slider(self.volume_slider)
+        self.volume_slider.add_event_cb(self._on_volume_slider, lv.EVENT.RELEASED, None)
+        self.volume_slider.add_event_cb(self._on_volume_slider_activity, lv.EVENT.PRESSED, None)
+        self.volume_slider.add_event_cb(self._on_volume_slider_activity, lv.EVENT.PRESSING, None)
+        self.volume_slider.add_event_cb(self._on_volume_slider_activity, lv.EVENT.RELEASED, None)
+        self.volume_popup.align_to(self.volume_btn, lv.ALIGN.OUT_TOP_MID, 0, -6)
 
         self._list_w = content_width - 16
         self._hub_y = PANEL_HEADER_H
@@ -885,6 +929,8 @@ class SpotifyUI:
                 panel.remove_flag(lv.obj.FLAG.HIDDEN)
             else:
                 panel.add_flag(lv.obj.FLAG.HIDDEN)
+        if name != "now":
+            self._hide_volume_popup()
         self._current_panel = name
         back_btn = self._panel_backs.get(name)
         if back_btn is not None:
@@ -2432,11 +2478,66 @@ class SpotifyUI:
         if self._volume_slider_busy:
             return
         value = self.volume_slider.get_value()
+        self._last_volume = int(value)
         self._volume_slider_busy = True
         try:
             self._run_transport(lambda: self.controller.change_volume_absolute(value))
         finally:
             self._volume_slider_busy = False
+
+    def _on_volume_slider_activity(self, event):
+        if event.get_code() not in (lv.EVENT.PRESSED, lv.EVENT.PRESSING, lv.EVENT.RELEASED):
+            return
+        self._reset_volume_hide_timer()
+
+    def _on_volume_btn(self, _event):
+        self._toggle_volume_popup()
+
+    def _toggle_volume_popup(self):
+        if self._volume_popup_visible:
+            self._hide_volume_popup()
+        else:
+            self._show_volume_popup()
+
+    def _show_volume_popup(self):
+        self.volume_slider.set_value(self._last_volume, lv.ANIM.OFF)
+        self.volume_popup.remove_flag(lv.obj.FLAG.HIDDEN)
+        self.volume_popup.align_to(self.volume_btn, lv.ALIGN.OUT_TOP_MID, 0, -6)
+        _raise_back_button(self.volume_popup)
+        _raise_back_button(self.volume_btn)
+        self._volume_popup_visible = True
+        _style_chip(self.volume_btn, self.volume_btn_label, active=True)
+        self._reset_volume_hide_timer()
+
+    def _hide_volume_popup(self):
+        self._cancel_volume_hide_timer()
+        if not self._volume_popup_visible:
+            return
+        self.volume_popup.add_flag(lv.obj.FLAG.HIDDEN)
+        self._volume_popup_visible = False
+        vol_btn_size = self.volume_btn.get_height()
+        _style_transport_secondary(self.volume_btn, vol_btn_size)
+
+    def _cancel_volume_hide_timer(self):
+        if self._volume_hide_timer is None:
+            return
+        try:
+            self._volume_hide_timer.delete()
+        except Exception:
+            pass
+        self._volume_hide_timer = None
+
+    def _reset_volume_hide_timer(self):
+        self._cancel_volume_hide_timer()
+        if not self._volume_popup_visible:
+            return
+        self._volume_hide_timer = lv.timer_create(self._on_volume_hide_timer, 3000, None)
+        if hasattr(self._volume_hide_timer, "set_repeat_count"):
+            self._volume_hide_timer.set_repeat_count(1)
+
+    def _on_volume_hide_timer(self, _timer):
+        self._volume_hide_timer = None
+        self._hide_volume_popup()
 
     def load_library(self, title, category):
         self.library_title.set_text(title)
@@ -2764,7 +2865,8 @@ class SpotifyUI:
 
         volume = state.get("volume")
         if volume is not None and not self._volume_slider_busy:
-            self.volume_slider.set_value(int(volume), lv.ANIM.OFF)
+            self._last_volume = int(volume)
+            self.volume_slider.set_value(self._last_volume, lv.ANIM.OFF)
 
     def _playback_flags(self, state):
         parts = []
