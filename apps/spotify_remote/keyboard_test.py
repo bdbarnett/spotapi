@@ -1,3 +1,4 @@
+# multimer types: queued, sync
 """
 keyboard_test.py — verify keyboard input reaches an LVGL textarea.
 
@@ -38,3 +39,4 @@ def on_change(_event):
 ta.add_event_cb(on_change, lv.EVENT.VALUE_CHANGED, None)
 
 print("Keyboard test ready — click the field and type.")
+display_driver.run()

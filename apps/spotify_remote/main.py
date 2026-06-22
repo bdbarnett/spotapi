@@ -1,3 +1,5 @@
+# multimer types: queued, sync
+# multimer types: queued, sync
 import gc
 import os
 import sys
@@ -64,20 +66,4 @@ lv.timer_create(_poll_timer, 5000, None)
 if ui._auth_ok:
     poll(ui, controller)
 
-
-def _run_event_loop():
-    try:
-        import lv_utils
-
-        if lv_utils.event_loop.is_running():
-            lv_utils.event_loop.current_instance().run()
-            return
-    except ImportError:
-        pass
-
-    import display_driver
-
-    display_driver.run()
-
-
-_run_event_loop()
+display_driver.run()
