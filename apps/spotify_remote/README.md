@@ -71,11 +71,11 @@ Restart the app after changing `config.py`.
 
 ## Linux (MicroPython unix port)
 
-With **pydisplay** on MicroPython unix, `import display_driver` starts the LVGL
-event loop via `lv_utils`. Full apps call **`display_driver.run()`** at the end
-of `main.py` to block on the main thread (`run_queued()` + SDL poll on Windows).
-Importing from the REPL without `run()` returns to `>>>` while the timer keeps
-the UI alive on some ports only — prefer `display_driver.run()` for desktop SDL.
+With **pydisplay** on MicroPython unix or CPython (Linux/macOS), `import display_driver`
+starts the LVGL event loop via `lv_utils`; `display_driver.run()` then returns to
+the REPL while the UI keeps running. On **Windows** (MicroPython or CPython),
+`run()` blocks in a `run_queued()` + `broker.poll()` loop because SDL needs the
+main thread.
 
 ```bash
 cd /path/to/pydisplay/src

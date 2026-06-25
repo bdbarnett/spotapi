@@ -1,5 +1,4 @@
 # multimer types: queued, sync
-# multimer types: queued, sync
 import gc
 import os
 import sys
