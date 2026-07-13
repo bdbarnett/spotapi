@@ -1,4 +1,5 @@
 # multimer types: queued, sync
+# pyscript skip: gallery
 import gc
 import os
 import sys

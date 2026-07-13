@@ -3,6 +3,18 @@ import time
 
 import lvgl as lv
 
+try:
+    LABEL_LONG_DOT = lv.label.LONG.DOT
+    LABEL_LONG_WRAP = lv.label.LONG.WRAP
+except AttributeError:
+    LABEL_LONG_DOT = lv.label.LONG_MODE.DOTS
+    LABEL_LONG_WRAP = lv.label.LONG_MODE.WRAP
+
+try:
+    ANIM_OFF = lv.ANIM.OFF
+except AttributeError:
+    ANIM_OFF = False
+
 from spotify_remote import config as remote_config
 from spotify_remote import image_view
 from spotify_remote.spotify_ctrl import (
@@ -350,7 +362,7 @@ class SpotifyUI:
 
         self.device_btn_label = lv.label(self.device_btn)
         self.device_btn_label.set_width(device_btn_w - 16)
-        self.device_btn_label.set_long_mode(lv.label.LONG.DOT)
+        self.device_btn_label.set_long_mode(LABEL_LONG_DOT)
         self.device_btn_label.set_style_text_color(_hex(MUTED), 0)
         self.device_btn_label.set_text("Device")
         self.device_btn_label.center()
@@ -401,7 +413,7 @@ class SpotifyUI:
         title_w = max(120, details_width - action_space)
         self.track_label = lv.label(self.now_panel)
         self.track_label.set_width(title_w)
-        self.track_label.set_long_mode(lv.label.LONG.DOT)
+        self.track_label.set_long_mode(LABEL_LONG_DOT)
         self.track_label.set_style_text_color(_hex(TEXT), 0)
         self.track_label.set_text("—")
         self.track_label.align(lv.ALIGN.TOP_LEFT, details_x, 28)
@@ -437,7 +449,7 @@ class SpotifyUI:
         self.artist_btn.add_event_cb(self._on_artist_name_click, lv.EVENT.CLICKED, None)
         self.artist_label = lv.label(self.artist_btn)
         self.artist_label.set_width(artist_title_w - 8)
-        self.artist_label.set_long_mode(lv.label.LONG.DOT)
+        self.artist_label.set_long_mode(LABEL_LONG_DOT)
         self.artist_label.set_text("")
         self.artist_label.align(lv.ALIGN.LEFT_MID, 4, 0)
 
@@ -469,7 +481,7 @@ class SpotifyUI:
         self.album_btn.add_event_cb(self._on_album_name_click, lv.EVENT.CLICKED, None)
         self.album_label = lv.label(self.album_btn)
         self.album_label.set_width(album_title_w - 8)
-        self.album_label.set_long_mode(lv.label.LONG.DOT)
+        self.album_label.set_long_mode(LABEL_LONG_DOT)
         self.album_label.set_text("")
         self.album_label.align(lv.ALIGN.LEFT_MID, 4, 0)
 
@@ -485,7 +497,7 @@ class SpotifyUI:
 
         self.playback_flags_label = lv.label(self.now_panel)
         self.playback_flags_label.set_width(details_width)
-        self.playback_flags_label.set_long_mode(lv.label.LONG.DOT)
+        self.playback_flags_label.set_long_mode(LABEL_LONG_DOT)
         self.playback_flags_label.set_text("")
         self.playback_flags_label.set_style_text_color(_hex(MUTED), 0)
         self.playback_flags_label.align(lv.ALIGN.TOP_LEFT, details_x, 148)
@@ -494,7 +506,7 @@ class SpotifyUI:
         self.progress.set_size(progress_width, slider_track_h)
         self.progress.align(lv.ALIGN.TOP_LEFT, details_x, 200)
         self.progress.set_range(0, 1000)
-        self.progress.set_value(0, lv.ANIM.OFF)
+        self.progress.set_value(0, ANIM_OFF)
         _style_slim_slider(self.progress)
         self.progress.add_event_cb(self._on_progress_slider, lv.EVENT.PRESSED, None)
         self.progress.add_event_cb(self._on_progress_slider, lv.EVENT.PRESSING, None)
@@ -568,7 +580,7 @@ class SpotifyUI:
 
         self.status_label = lv.label(self.now_panel)
         self.status_label.set_width(label_width)
-        self.status_label.set_long_mode(lv.label.LONG.DOT)
+        self.status_label.set_long_mode(LABEL_LONG_DOT)
         self.status_label.set_text("")
         self.status_label.set_style_text_color(_hex(MUTED), 0)
         self.status_label.align(lv.ALIGN.BOTTOM_MID, 0, -8)
@@ -604,7 +616,7 @@ class SpotifyUI:
         self.volume_slider.set_size(vol_slider_w, vol_slider_h)
         self.volume_slider.align(lv.ALIGN.CENTER, 0, 0)
         self.volume_slider.set_range(0, 100)
-        self.volume_slider.set_value(50, lv.ANIM.OFF)
+        self.volume_slider.set_value(50, ANIM_OFF)
         if hasattr(self.volume_slider, "set_orientation") and hasattr(lv, "SLIDER_ORIENTATION"):
             self.volume_slider.set_orientation(lv.SLIDER_ORIENTATION.VERTICAL)
         _style_slim_slider(self.volume_slider)
@@ -651,7 +663,7 @@ class SpotifyUI:
         self.queue_back_btn.add_event_cb(self._nav_back, lv.EVENT.CLICKED, None)
         self.queue_note = lv.label(self.queue_panel)
         self.queue_note.set_width(content_width - PANEL_TITLE_X - 16)
-        self.queue_note.set_long_mode(lv.label.LONG.WRAP)
+        self.queue_note.set_long_mode(LABEL_LONG_WRAP)
         self.queue_note.set_text("Tap Now on a track to play it. Remove from queue is not supported by Spotify.")
         self.queue_note.set_style_text_color(_hex(MUTED), 0)
         self.queue_note.align(lv.ALIGN.TOP_LEFT, PANEL_TITLE_X, 36)
@@ -721,7 +733,7 @@ class SpotifyUI:
 
         self.search_genre_note = lv.label(self.search_panel)
         self.search_genre_note.set_width(content_width - 32)
-        self.search_genre_note.set_long_mode(lv.label.LONG.DOT)
+        self.search_genre_note.set_long_mode(LABEL_LONG_DOT)
         self.search_genre_note.set_style_text_color(_hex(MUTED), 0)
         self.search_genre_note.set_text("")
         self.search_genre_note.align(lv.ALIGN.TOP_LEFT, 16, self._search_genre_y + GENRE_ROW_H - 4)
@@ -816,7 +828,7 @@ class SpotifyUI:
 
         title = lv.label(panel)
         title.set_width(content_width - PANEL_TITLE_X - 16)
-        title.set_long_mode(lv.label.LONG.DOT)
+        title.set_long_mode(LABEL_LONG_DOT)
         title.set_style_text_color(_hex(TEXT), 0)
         title.set_text("")
         title.align(lv.ALIGN.TOP_LEFT, PANEL_TITLE_X, 14)
@@ -1041,7 +1053,7 @@ class SpotifyUI:
 
         self.auth_message = lv.label(self.auth_overlay)
         self.auth_message.set_width(width - 80)
-        self.auth_message.set_long_mode(lv.label.LONG.WRAP)
+        self.auth_message.set_long_mode(LABEL_LONG_WRAP)
         self.auth_message.set_style_text_color(_hex(MUTED), 0)
         self.auth_message.set_style_text_align(lv.TEXT_ALIGN.CENTER, 0)
         self.auth_message.set_text("Sign in to control playback.")
@@ -1237,7 +1249,7 @@ class SpotifyUI:
         self._clear_scroll(scroll)
         label = lv.label(scroll)
         label.set_width(self._list_w - 24)
-        label.set_long_mode(lv.label.LONG.WRAP)
+        label.set_long_mode(LABEL_LONG_WRAP)
         label.set_text(message)
         label.set_style_text_color(_hex(MUTED), 0)
         label.align(lv.ALIGN.TOP_MID, 0, 16)
@@ -1503,7 +1515,7 @@ class SpotifyUI:
                 _style_link_button(main_btn, None)
                 text = lv.label(main_btn)
                 text.set_width(max(60, main_w - 16))
-                text.set_long_mode(lv.label.LONG.DOT)
+                text.set_long_mode(LABEL_LONG_DOT)
                 label_text = self._entry_label(entry)
                 if is_now:
                     label_text = "> " + label_text
@@ -1519,7 +1531,7 @@ class SpotifyUI:
             else:
                 text = lv.label(row)
                 text.set_width(max(60, main_w - 8))
-                text.set_long_mode(lv.label.LONG.DOT)
+                text.set_long_mode(LABEL_LONG_DOT)
                 label_text = self._entry_label(entry)
                 if is_now:
                     label_text = "> " + label_text
@@ -2500,7 +2512,7 @@ class SpotifyUI:
             self._show_volume_popup()
 
     def _show_volume_popup(self):
-        self.volume_slider.set_value(self._last_volume, lv.ANIM.OFF)
+        self.volume_slider.set_value(self._last_volume, ANIM_OFF)
         self.volume_popup.remove_flag(lv.obj.FLAG.HIDDEN)
         self.volume_popup.align_to(self.volume_btn, lv.ALIGN.OUT_TOP_MID, 0, -6)
         _raise_back_button(self.volume_popup)
@@ -2823,10 +2835,10 @@ class SpotifyUI:
                 progress = state["progress_ms"] or 0
                 if duration > 0:
                     self.progress.set_value(
-                        int(progress * 1000 / duration), lv.ANIM.OFF
+                        int(progress * 1000 / duration), ANIM_OFF
                     )
                 else:
-                    self.progress.set_value(0, lv.ANIM.OFF)
+                    self.progress.set_value(0, ANIM_OFF)
                 self.time_label.set_text(
                     "{} / {}".format(_fmt_ms(progress), _fmt_ms(duration))
                 )
@@ -2834,9 +2846,9 @@ class SpotifyUI:
             duration = state["duration_ms"] or 0
             progress = state["progress_ms"] or 0
             if duration > 0:
-                self.progress.set_value(int(progress * 1000 / duration), lv.ANIM.OFF)
+                self.progress.set_value(int(progress * 1000 / duration), ANIM_OFF)
             else:
-                self.progress.set_value(0, lv.ANIM.OFF)
+                self.progress.set_value(0, ANIM_OFF)
             self.time_label.set_text(
                 "{} / {}".format(_fmt_ms(progress), _fmt_ms(duration))
             )
@@ -2866,7 +2878,7 @@ class SpotifyUI:
         volume = state.get("volume")
         if volume is not None and not self._volume_slider_busy:
             self._last_volume = int(volume)
-            self.volume_slider.set_value(self._last_volume, lv.ANIM.OFF)
+            self.volume_slider.set_value(self._last_volume, ANIM_OFF)
 
     def _playback_flags(self, state):
         parts = []
