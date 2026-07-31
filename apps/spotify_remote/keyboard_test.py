@@ -12,9 +12,9 @@ Click the text field, type, and watch characters appear. VALUE_CHANGED
 events are printed to the REPL.
 """
 
-import display_driver  # NOQA
-
 import lvgl as lv
+import display_driver  # NOQA
+from board_config import runtime
 
 
 scr = lv.screen_active()
@@ -39,4 +39,4 @@ def on_change(_event):
 ta.add_event_cb(on_change, lv.EVENT.VALUE_CHANGED, None)
 
 print("Keyboard test ready — click the field and type.")
-display_driver.run()
+runtime.run_forever()

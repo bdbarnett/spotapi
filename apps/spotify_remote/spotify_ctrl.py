@@ -137,8 +137,23 @@ def _join_dir(directory, name):
     return directory + "/" + name
 
 
-CONFIG_PATH = _join_dir(_app_dir(), "spotapi.local.json")
-TOKEN_PATH = _join_dir(_app_dir(), "tokens.json")
+def _config_path(name):
+    """Prefer app-local config, falling back when Windows cannot follow its WSL symlink."""
+    app_path = _join_dir(_app_dir(), name)
+    try:
+        os.stat(app_path)
+        return app_path
+    except OSError:
+        repo_path = _join_dir(_app_dir(), "../../" + name)
+        try:
+            os.stat(repo_path)
+            return repo_path
+        except OSError:
+            return app_path
+
+
+CONFIG_PATH = _config_path("spotapi.local.json")
+TOKEN_PATH = _config_path("tokens.json")
 ART_CACHE_PATH = _join_dir(_app_dir(), "art_cache")
 DEVICE_CACHE_SECONDS = 15
 

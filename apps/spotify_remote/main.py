@@ -4,11 +4,20 @@ import gc
 import os
 import sys
 
-# Run from the spotapi repo root so spotapi and config files resolve.
+# Run from pydisplay/src; spotapi and spotify_remote are supplied on sys.path.
 sys.path.insert(0, os.getcwd())
+
+from displaysys import env_set  # NOQA
+
+# This desktop UI owns its logical display geometry. Set these before
+# display_driver imports board_config and constructs the display.
+env_set("PYDISPLAY_WIDTH", "800")
+env_set("PYDISPLAY_HEIGHT", "480")
+env_set("PYDISPLAY_SCALE", "1")
 
 import display_driver  # NOQA
 import lvgl as lv  # NOQA
+from board_config import runtime  # NOQA
 
 # ---------------------------------------------------------------------------
 # Display and input drivers (you provide these on hardware).
@@ -66,4 +75,4 @@ lv.timer_create(_poll_timer, 5000, None)
 if ui._auth_ok:
     poll(ui, controller)
 
-display_driver.run()
+runtime.run_forever()

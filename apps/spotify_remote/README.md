@@ -71,16 +71,14 @@ Restart the app after changing `config.py`.
 
 ## Linux (MicroPython unix port)
 
-With **pydisplay** on MicroPython unix or CPython (Linux/macOS), `import display_driver`
-starts the LVGL event loop via `lv_utils`; `display_driver.run()` then returns to
-the REPL while the UI keeps running. On **Windows** (MicroPython or CPython),
-`run()` blocks in a `run_queued()` + `broker.poll()` loop because SDL needs the
-main thread.
+With **pydisplay**, importing `display_driver` wires LVGL into the shared
+`board_config.runtime`. The application then keeps the desktop event loop on the
+main thread with `runtime.run_forever()`.
 
 ```bash
 cd /path/to/pydisplay/src
-lv -i lib/path.py
->>> from spotify_remote import main
+MICROPYPATH=.:.frozen:lib:add_ons:examples:$HOME/.micropython/lib:/usr/lib/micropython \
+    micropython examples/spotify_remote/main.py
 ```
 
 For **lvgl_micropython** (without pydisplay), build with SDL display and pointer

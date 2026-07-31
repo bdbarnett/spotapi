@@ -293,14 +293,16 @@ class SpotifyUI:
     def _build(self, parent):
         width = self.width
         height = self.height
+        compact_height = height <= 500
         header_h = 56
-        footer_h = 56
-        margin = 16
+        footer_h = 48 if compact_height else 56
+        margin = 12 if compact_height else 16
         content_width = width - margin * 2
         content_height = height - header_h - footer_h - margin * 2
         panel_y = header_h + margin
         label_width = max(180, content_width - 96)
-        art_size = min(content_height - 48, (content_width * 42) // 100, 420)
+        art_inset = 32 if compact_height else 48
+        art_size = min(content_height - art_inset, (content_width * 42) // 100, 420)
         art_x = 24
         details_gap = 32
         details_x = art_x + art_size + details_gap
@@ -312,10 +314,11 @@ class SpotifyUI:
         self._details_width = details_width
         progress_width = details_width
         slider_track_h = 16
-        transport_btn_size = min(56, max(48, (progress_width - 80) // 4))
+        transport_max = 48 if compact_height else 56
+        transport_btn_size = min(transport_max, max(44, (progress_width - 80) // 4))
         play_btn_size = min(72, transport_btn_size + 12)
         seek_btn_w = max(transport_btn_size, 52)
-        transport_gap = 12
+        transport_gap = 8 if compact_height else 12
         transport_total_width = (
             transport_btn_size * 2 + seek_btn_w * 2 + play_btn_size + transport_gap * 4
         )
@@ -323,8 +326,17 @@ class SpotifyUI:
         btn_row_height = max(transport_btn_size, play_btn_size) + 8
         aux_gap = 8
         aux_btn_w = min(88, max(48, (progress_width - aux_gap) // 2))
-        aux_btn_h = 40
+        aux_btn_h = 32 if compact_height else 40
         action_space = CHIP_W * 2 + CHIP_GAP + 16
+        track_y = 18 if compact_height else 28
+        track_action_y = 16 if compact_height else 24
+        artist_y = 54 if compact_height else 64
+        album_y = 90 if compact_height else 104
+        flags_y = 128 if compact_height else 148
+        progress_y = 176 if compact_height else 200
+        time_y = 194 if compact_height else 218
+        transport_row_y = 210 if compact_height else 236
+        aux_row_y = 282 if compact_height else 314
 
         parent.set_style_bg_color(_hex(BG), 0)
 
@@ -416,14 +428,14 @@ class SpotifyUI:
         self.track_label.set_long_mode(LABEL_LONG_DOT)
         self.track_label.set_style_text_color(_hex(TEXT), 0)
         self.track_label.set_text("—")
-        self.track_label.align(lv.ALIGN.TOP_LEFT, details_x, 28)
+        self.track_label.align(lv.ALIGN.TOP_LEFT, details_x, track_y)
 
         track_action_x = details_x + title_w + CHIP_GAP
         self.playlist_add_btn, self.playlist_add_label = self._action_chip(
             self.now_panel,
             "+PL",
             track_action_x,
-            24,
+            track_action_y,
             CHIP_W + 16,
             CHIP_H,
             self._on_add_to_playlist,
@@ -432,7 +444,7 @@ class SpotifyUI:
             self.now_panel,
             "Like",
             track_action_x + CHIP_W + 16 + CHIP_GAP,
-            24,
+            track_action_y,
             CHIP_W,
             CHIP_H,
             self._on_like_track,
@@ -444,7 +456,7 @@ class SpotifyUI:
         artist_title_w = max(120, details_width - artist_chips_w)
         self.artist_btn = lv.button(self.now_panel)
         self.artist_btn.set_size(artist_title_w, CHIP_H)
-        self.artist_btn.align(lv.ALIGN.TOP_LEFT, details_x, 64)
+        self.artist_btn.align(lv.ALIGN.TOP_LEFT, details_x, artist_y)
         _style_link_button(self.artist_btn, None)
         self.artist_btn.add_event_cb(self._on_artist_name_click, lv.EVENT.CLICKED, None)
         self.artist_label = lv.label(self.artist_btn)
@@ -458,7 +470,7 @@ class SpotifyUI:
             self.now_panel,
             "Albums",
             artist_chips_x,
-            64,
+            artist_y,
             artist_albums_w,
             CHIP_H,
             self._on_artist_albums,
@@ -467,7 +479,7 @@ class SpotifyUI:
             self.now_panel,
             "Follow",
             artist_chips_x + artist_albums_w + CHIP_GAP,
-            64,
+            artist_y,
             artist_follow_w,
             CHIP_H,
             self._on_follow_artist_now,
@@ -476,7 +488,7 @@ class SpotifyUI:
         album_title_w = max(120, details_width - CHIP_W - CHIP_GAP)
         self.album_btn = lv.button(self.now_panel)
         self.album_btn.set_size(album_title_w, CHIP_H)
-        self.album_btn.align(lv.ALIGN.TOP_LEFT, details_x, 104)
+        self.album_btn.align(lv.ALIGN.TOP_LEFT, details_x, album_y)
         _style_link_button(self.album_btn, None)
         self.album_btn.add_event_cb(self._on_album_name_click, lv.EVENT.CLICKED, None)
         self.album_label = lv.label(self.album_btn)
@@ -489,7 +501,7 @@ class SpotifyUI:
             self.now_panel,
             "Save",
             details_x + album_title_w + CHIP_GAP,
-            104,
+            album_y,
             CHIP_W,
             CHIP_H,
             self._on_save_album,
@@ -500,11 +512,11 @@ class SpotifyUI:
         self.playback_flags_label.set_long_mode(LABEL_LONG_DOT)
         self.playback_flags_label.set_text("")
         self.playback_flags_label.set_style_text_color(_hex(MUTED), 0)
-        self.playback_flags_label.align(lv.ALIGN.TOP_LEFT, details_x, 148)
+        self.playback_flags_label.align(lv.ALIGN.TOP_LEFT, details_x, flags_y)
 
         self.progress = lv.slider(self.now_panel)
         self.progress.set_size(progress_width, slider_track_h)
-        self.progress.align(lv.ALIGN.TOP_LEFT, details_x, 200)
+        self.progress.align(lv.ALIGN.TOP_LEFT, details_x, progress_y)
         self.progress.set_range(0, 1000)
         self.progress.set_value(0, ANIM_OFF)
         _style_slim_slider(self.progress)
@@ -515,11 +527,11 @@ class SpotifyUI:
         self.time_label = lv.label(self.now_panel)
         self.time_label.set_style_text_color(_hex(MUTED), 0)
         self.time_label.set_text("0:00 / 0:00")
-        self.time_label.align(lv.ALIGN.TOP_LEFT, details_x, 218)
+        self.time_label.align(lv.ALIGN.TOP_LEFT, details_x, time_y)
 
         btn_row = lv.obj(self.now_panel)
         btn_row.set_size(progress_width, btn_row_height)
-        btn_row.align(lv.ALIGN.TOP_LEFT, details_x, 236)
+        btn_row.align(lv.ALIGN.TOP_LEFT, details_x, transport_row_y)
         btn_row.set_style_bg_opa(lv.OPA.TRANSP, 0)
         btn_row.set_style_border_width(0, 0)
         btn_row.set_style_pad_all(0, 0)
@@ -561,7 +573,7 @@ class SpotifyUI:
 
         aux_row = lv.obj(self.now_panel)
         aux_row.set_size(progress_width, aux_btn_h + 12)
-        aux_row.align(lv.ALIGN.TOP_LEFT, details_x, 314)
+        aux_row.align(lv.ALIGN.TOP_LEFT, details_x, aux_row_y)
         aux_row.set_style_bg_opa(lv.OPA.TRANSP, 0)
         aux_row.set_style_border_width(0, 0)
         aux_row.set_style_pad_all(0, 0)
