@@ -7,7 +7,7 @@ import sys
 # Run from pydisplay/src; spotapi and spotify_remote are supplied on sys.path.
 sys.path.insert(0, os.getcwd())
 
-from displaysys import env_set  # NOQA
+from displaydev import env_set  # NOQA
 
 # This desktop UI owns its logical display geometry. Set these before
 # display_driver imports board_config and constructs the display.
