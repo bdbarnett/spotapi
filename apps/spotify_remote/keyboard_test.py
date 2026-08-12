@@ -2,10 +2,10 @@
 """
 keyboard_test.py — verify keyboard input reaches an LVGL textarea.
 
-Run from pydisplay (with the SDL window focused):
+Run from pydevices-examples (with the SDL window focused):
 
-    cd /path/to/pydisplay/src
-    lv -i lib/path.py
+    cd /path/to/pydevices-examples/lib
+    lv -i utils/path.py
     >>> from spotify_remote import keyboard_test
 
 Click the text field, type, and watch characters appear. VALUE_CHANGED

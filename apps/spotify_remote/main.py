@@ -4,7 +4,7 @@ import gc
 import os
 import sys
 
-# Run from pydisplay/src; spotapi and spotify_remote are supplied on sys.path.
+# Run from pydevices-examples/lib; spotapi and spotify_remote are supplied on sys.path.
 sys.path.insert(0, os.getcwd())
 
 from displaydev import env_set  # NOQA

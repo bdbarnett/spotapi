@@ -49,7 +49,7 @@ ln -s ../../tokens.json tokens.json   # optional: reuse repo-root tokens
 ```
 
 Both files are gitignored. When this folder is symlinked elsewhere (for example
-`pydisplay/src/examples/spotify_remote`), paths still resolve to the real app
+`pydevices-examples/lib/examples/spotify_remote`), paths still resolve to the real app
 directory.
 
 Cover art is cached under `art_cache/` beside the app. The cache is gitignored
@@ -71,17 +71,17 @@ Restart the app after changing `config.py`.
 
 ## Linux (MicroPython unix port)
 
-With **pydisplay**, importing `display_driver` wires LVGL into the shared
-`board_config.runtime`. The application then keeps the desktop event loop on the
+With **pydevices-examples**, importing `display_driver` wires LVGL into the shared
+display bridge. The application then keeps the desktop event loop on the
 main thread with `runtime.run_forever()`.
 
 ```bash
-cd /path/to/pydisplay/src
-MICROPYPATH=.:.frozen:lib:add_ons:examples:$HOME/.micropython/lib:/usr/lib/micropython \
+cd /path/to/pydevices-examples/lib
+MICROPYPATH=.:.frozen:utils:$HOME/.micropython/lib:/usr/lib/micropython \
     micropython examples/spotify_remote/main.py
 ```
 
-For **lvgl_micropython** (without pydisplay), build with SDL display and pointer
+For **lvgl-micropython** (without the examples stack), build with SDL display and pointer
 input, initialize drivers before importing `ui`, then run with a `TaskHandler`
 in scope — see that project's unix example.
 
