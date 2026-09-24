@@ -39,6 +39,7 @@ class LocalSpeaker:
         self._service = getattr(device, "service", None)
         # 10 ms of silence keeps a queued host sink ticking until playback.
         self._silence = bytes(fmt.frame_size * fmt.rate * PUMP_MS // 1000)
+        self._host = sys.platform != "esp32"
         self._saved = earful.has_credentials()
         self._ticks = 0
         self._timer = lv.timer_create(self._pump, PUMP_MS, None)
@@ -46,8 +47,11 @@ class LocalSpeaker:
     def _pump(self, _timer):
         if self._service is not None:
             self._service()
-        if not self.device.playing and self._pcm.queued_size() < 4 * len(self._silence):
-            self._pcm.write(self._silence)
+        # Queued host sinks stall without a keepalive; a board's I2S does not
+        # queue (queued_size() is 0), so it gets none.
+        if self._host and not self.device.playing:
+            if self._pcm.queued_size() < 4 * len(self._silence):
+                self._pcm.write(self._silence)
         self._pcm.service()
         self._ticks += 1
         if self._ticks % 100 == 0:
