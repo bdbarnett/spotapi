@@ -128,9 +128,12 @@ Without earful, or with no name given, the remote runs as before.
 
 On a board with no codec (an ESP32-S3 panel), set `LOCAL_SPEAKER_OUTPUT =
 "usb"` and the speaker plays through a hosted USB sound card instead, such as
-a P4 running usbif's `soundcard.py`. There's no resampling: the card must
-offer 44.1 kHz ([usbif#35](https://github.com/PyDevices/usbif/issues/35)), and
-if it doesn't the remote says what it does offer and runs without a speaker.
+a P4 running usbif's `soundcard.py`. It asks usbif for a 2 s host ring
+(PSRAM) so UI stalls don't starve the bus, and needs a firmware whose usbif
+has `ring_ms` ([usbif#36](https://github.com/PyDevices/usbif/issues/36)).
+There's no resampling: the card must offer 44.1 kHz
+([usbif#35](https://github.com/PyDevices/usbif/issues/35)), and if it doesn't
+the remote says what it does offer and runs without a speaker.
 
 ## Hardware (ESP32 and other MCUs)
 

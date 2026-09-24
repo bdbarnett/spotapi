@@ -24,9 +24,11 @@ CRED_FILE = "earful.credentials"
 PUMP_RING_SECONDS = 4
 # How long to wait for a hosted USB sound card to enumerate.
 USB_FIND_MS = 15000
-# usbif's host ring (USBIF_UAC_RING in usbif_host_uac.c). The driver does not
-# publish it, and space() must not over-report or write() blocks the UI.
-USB_RING_BYTES = 8192
+# The USB host ring between this process and the bus (usbif#36). It has to
+# outlast the longest stall of the interpreter -- a redraw, a Web API call --
+# like the audio pump's ring on a board; 2 s of 44.1 kHz stereo is ~350 KB,
+# which usbif puts in PSRAM.
+USB_RING_MS = 2000
 
 
 def _load_board_credentials(earful):
@@ -110,9 +112,9 @@ def _pump_output(fmt):
 class _UsbPCM:
     """earful's view of a hosted USB sound card (usbif.uac_audio output).
 
-    The C host driver drains a small ring onto the bus in real time. space()
-    keeps earful from writing more than fits: UacHostOutput's write waits for
-    room, and waiting here would stall the UI.
+    The C host driver drains the ring onto the bus in real time. earful
+    writes at most space() and uses try_write(), which never waits for the
+    bus, so a full ring can never stall the UI.
     """
 
     def __init__(self, host, out):
@@ -120,10 +122,10 @@ class _UsbPCM:
         self._out = out
 
     def write(self, buf):
-        return self._out.write(buf)
+        return self._out.try_write(buf)
 
     def space(self):
-        return max(0, USB_RING_BYTES - 1 - self._out.queued_size())
+        return self._out.space()
 
     def queued_size(self):
         return self._out.queued_size()
@@ -163,8 +165,17 @@ def _usb_output(fmt):
             if any(s.direction == uac.OUT for s in streams):
                 try:
                     out = uac_audio.output(
-                        dev_id, rate=fmt.rate, channels=fmt.channels, bits=fmt.bits
+                        dev_id,
+                        rate=fmt.rate,
+                        channels=fmt.channels,
+                        bits=fmt.bits,
+                        ring_ms=USB_RING_MS,
                     )
+                except TypeError:
+                    host.stop()
+                    print("local speaker: this firmware's usbif predates ring_ms "
+                          "(usbif#36); rebuild with current usbif")
+                    return None
                 except ValueError as error:
                     # Says what the card does offer; usbif#35 adds 44.1 kHz
                     # to the P4's sound card.
