@@ -136,6 +136,12 @@ class _UsbPCM:
     def set_volume(self, volume):
         self._out.set_volume(volume)
 
+    def c_sink(self):
+        # earful drains into this from its own task, so the VM no longer
+        # moves the bytes (usbif#43). A usbif without it raises
+        # AttributeError here, and earful keeps its VM pump.
+        return self._out.c_sink()
+
     def open(self):
         self._out.open()
 
