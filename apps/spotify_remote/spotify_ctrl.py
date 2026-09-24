@@ -139,17 +139,16 @@ def _join_dir(directory, name):
 
 def _config_path(name):
     """Prefer app-local config, falling back when Windows cannot follow its WSL symlink."""
+    # Open rather than stat: over \\wsl.localhost a symlink stats fine but
+    # cannot be opened.
     app_path = _join_dir(_app_dir(), name)
-    try:
-        os.stat(app_path)
-        return app_path
-    except OSError:
-        repo_path = _join_dir(_app_dir(), "../../" + name)
+    for path in (app_path, _join_dir(_app_dir(), "../../" + name)):
         try:
-            os.stat(repo_path)
-            return repo_path
+            open(path, "rb").close()
+            return path
         except OSError:
-            return app_path
+            pass
+    return app_path
 
 
 CONFIG_PATH = _config_path("spotapi.local.json")

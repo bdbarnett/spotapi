@@ -38,7 +38,7 @@ Non-obvious notes:
   before constructing `SpotifyClient`.
 - MicroPython on Linux is validated; embedded MicroPython and CircuitPython on
   hardware are still outstanding. See `PORTABILITY.md` "Runtime Validation".
-- `apps/spotify_remote/` requires MicroPython, LVGL, and pydisplay (or board
+- `apps/spotify_remote/` requires LVGL and the PyDevices stack (or board
   drivers); it is not needed to verify the library on the VM.
 - Object hydration uses the global client (`set_client()`); per-object clients
   are not planned.

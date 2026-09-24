@@ -4,20 +4,31 @@ import gc
 import os
 import sys
 
-# Run from pydevices-examples/lib; spotapi and spotify_remote are supplied on sys.path.
-sys.path.insert(0, os.getcwd())
+
+def _parent(path):
+    path = path.replace("\\", "/").rstrip("/")
+    return path.rsplit("/", 1)[0] if "/" in path else "."
+
+
+# Run from anywhere: the spotify_remote package lives in apps/, and the spotapi
+# package at the repo root, two levels above this file.
+_APPS_DIR = _parent(_parent(__file__))
+if not _APPS_DIR.startswith("/") and ":" not in _APPS_DIR:
+    _APPS_DIR = os.getcwd().replace("\\", "/") + "/" + _APPS_DIR
+for _path in (_parent(_APPS_DIR), _APPS_DIR):
+    if _path not in sys.path:
+        sys.path.insert(0, _path)
 
 from displaydev import env_set  # NOQA
 
 # This desktop UI owns its logical display geometry. Set these before
 # display_driver imports board_config and constructs the display.
-env_set("PYDISPLAY_WIDTH", "800")
-env_set("PYDISPLAY_HEIGHT", "480")
-env_set("PYDISPLAY_SCALE", "1")
+env_set("PYDEVICES_WIDTH", "800")
+env_set("PYDEVICES_HEIGHT", "480")
+env_set("PYDEVICES_SCALE", "1")
 
 import display_driver  # NOQA
 import lvgl as lv  # NOQA
-from board_config import runtime  # NOQA
 
 # ---------------------------------------------------------------------------
 # Display and input drivers (you provide these on hardware).
@@ -74,5 +85,3 @@ def _poll_timer(_timer):
 lv.timer_create(_poll_timer, 5000, None)
 if ui._auth_ok:
     poll(ui, controller)
-
-runtime.run_forever()

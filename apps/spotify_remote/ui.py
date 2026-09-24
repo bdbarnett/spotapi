@@ -1496,7 +1496,7 @@ class SpotifyUI:
 
             left_pad = 8
             main_w = self._list_w - 8
-            if thumbs and entry.get("art_url"):
+            if thumbs and entry.get("art_url") and image_view.jpeg_supported():
                 art_path = self.controller.art_cache.path_for_url(entry["art_url"])
                 if art_path:
                     try:

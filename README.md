@@ -255,10 +255,10 @@ Library code can also use `TokenCache("tokens.json")` with
 
 ## Applications
 
-[`apps/spotify_remote/`](apps/spotify_remote/) is an LVGL MicroPython touch UI
-for playback control, library browse, queue, search, and cover art. It uses
-`spotapi` on MicroPython and is developed on the UNIX port with
-[pydisplay](https://github.com/lvgl-micropython/lvgl_micropython). See
+[`apps/spotify_remote/`](apps/spotify_remote/) is an LVGL touch UI for playback
+control, library browse, queue, search, and cover art. It runs on CPython and
+MicroPython, Linux and Windows, on the
+[PyDevices](https://github.com/PyDevices/pydevices) stack. See
 [`apps/spotify_remote/README.md`](apps/spotify_remote/README.md) for setup;
 `spotapi.local.json` and `tokens.json` live in the app directory, not the repo
 root.

@@ -2,11 +2,9 @@
 """
 keyboard_test.py — verify keyboard input reaches an LVGL textarea.
 
-Run from pydevices-examples (with the SDL window focused):
+Run with the SDL window focused:
 
-    cd /path/to/pydevices-examples/lib
-    lv -i utils/path.py
-    >>> from spotify_remote import keyboard_test
+    micropython apps/spotify_remote/keyboard_test.py
 
 Click the text field, type, and watch characters appear. VALUE_CHANGED
 events are printed to the REPL.
@@ -14,7 +12,6 @@ events are printed to the REPL.
 
 import lvgl as lv
 import display_driver  # NOQA
-from board_config import runtime
 
 
 scr = lv.screen_active()
@@ -39,4 +36,3 @@ def on_change(_event):
 ta.add_event_cb(on_change, lv.EVENT.VALUE_CHANGED, None)
 
 print("Keyboard test ready — click the field and type.")
-runtime.run_forever()

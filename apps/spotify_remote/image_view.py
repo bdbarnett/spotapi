@@ -37,8 +37,7 @@ def _image_descriptor(path):
     with open(path, "rb") as file:
         data = file.read()
 
-    if data.startswith(b"\xff\xd8"):
-        _ensure_tjpgd()
+    if data.startswith(b"\xff\xd8") and jpeg_supported():
         width, height = _jpeg_size(data)
     else:
         width = 0
@@ -58,15 +57,26 @@ def _image_descriptor(path):
     return descriptor, data
 
 
-def _ensure_tjpgd():
+def jpeg_supported():
+    """Return True when this LVGL build can decode JPEG (Spotify cover art)."""
     global _TJPGD_READY
-    if _TJPGD_READY:
-        return
-    try:
-        lv.tjpgd_init()
-        _TJPGD_READY = True
-    except Exception:
-        pass
+    if not _TJPGD_READY:
+        try:
+            # MicroPython firmware: displayif's jpegio registers the decoder
+            # (LVGL's own TJPGD is off there). Idempotent; call it explicitly
+            # because not every port registers on import.
+            import jpegio
+
+            jpegio.register_lvgl_decoder()
+            _TJPGD_READY = True
+        except (ImportError, AttributeError, RuntimeError):
+            try:
+                # CPython lvgl: LVGL's built-in TJPGD.
+                lv.tjpgd_init()
+                _TJPGD_READY = True
+            except AttributeError:
+                pass
+    return _TJPGD_READY
 
 
 class CoverArtView:

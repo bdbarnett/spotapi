@@ -4,8 +4,8 @@ LVGL touch UI for Spotify playback control, built on [spotapi](../../) and
 [lvgl_micropython](https://github.com/lvgl-micropython/lvgl_micropython).
 
 Target display: 1024x600 capacitive touch. Hardware-specific display and input
-drivers are intentionally deferred; current development is tested with the
-MicroPython Unix port under pydisplay.
+drivers are intentionally deferred; it runs on desktop CPython and MicroPython (Linux and
+Windows) under the PyDevices stack.
 
 ## Files
 
@@ -18,7 +18,7 @@ MicroPython Unix port under pydisplay.
 | `artwork_cache.py` | Downloads and caches cover art from Spotify CDN URLs |
 | `image_view.py` | Small LVGL cover-art view with a placeholder fallback |
 | `genre_seeds.py` | Static genre preset list when the API seed endpoint is unavailable |
-| `keyboard_test.py` | pydisplay keyboard smoke test (LVGL textarea input) |
+| `keyboard_test.py` | PyDevices keyboard smoke test (LVGL textarea input) |
 
 ## Prerequisites
 
@@ -48,9 +48,8 @@ cp ../../spotapi.local.json.example spotapi.local.json
 ln -s ../../tokens.json tokens.json   # optional: reuse repo-root tokens
 ```
 
-Both files are gitignored. When this folder is symlinked elsewhere (for example
-`pydevices-examples/lib/examples/spotify_remote`), paths still resolve to the real app
-directory.
+Both files are gitignored. When a file here cannot be opened (Windows reaching a WSL symlink over
+`\\wsl.localhost`), the repo-root copy is used instead.
 
 Cover art is cached under `art_cache/` beside the app. The cache is gitignored
 and reused across app restarts. Limits are set in `config.py`:
@@ -69,21 +68,21 @@ API allows it; otherwise the app uses the static list in `genre_seeds.py`.
 
 Restart the app after changing `config.py`.
 
-## Linux (MicroPython unix port)
+## Desktop (Linux and Windows)
 
-With **pydevices-examples**, importing `display_driver` wires LVGL into the shared
-display bridge. The application then keeps the desktop event loop on the
-main thread with `runtime.run_forever()`.
+Runs on CPython and MicroPython with the released PyDevices stack installed
+(`pydevices-desktop` and `pydevices-lvgl` from pip on CPython; the mip desktop
+board in `~/.micropython/lib` on MicroPython). `main.py` puts the repo root
+and `apps/` on `sys.path` itself, so run it from the spotapi repo root:
 
 ```bash
-cd /path/to/pydevices-examples/lib
-MICROPYPATH=.:.frozen:utils:$HOME/.micropython/lib:/usr/lib/micropython \
-    micropython examples/spotify_remote/main.py
+cd /path/to/spotapi
+micropython apps/spotify_remote/main.py      # or python, micropython.exe, python.exe
 ```
 
-For **lvgl-micropython** (without the examples stack), build with SDL display and pointer
-input, initialize drivers before importing `ui`, then run with a `TaskHandler`
-in scope — see that project's unix example.
+Cover art needs a JPEG decoder in LVGL: displayif's `jpegio` on MicroPython
+firmware, LVGL's TJPGD on CPython. Without one the view shows
+"Cover unavailable" and list rows omit thumbnails.
 
 ## Hardware (ESP32 and other MCUs)
 
