@@ -28,3 +28,8 @@ SEARCH_RESULT_LIMIT = 10
 
 # Action chips per list row before wrapping to a second chip row.
 MAX_ROW_ACTIONS = 4
+
+# Name for a local Spotify Connect speaker in this process (needs the earful
+# usermod), e.g. "earful-win". None leaves it off. The first command-line
+# argument overrides it: micropython.exe apps/spotify_remote/main.py earful-win
+LOCAL_SPEAKER = None

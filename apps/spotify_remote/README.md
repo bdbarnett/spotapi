@@ -18,6 +18,7 @@ Windows) under the PyDevices stack.
 | `artwork_cache.py` | Downloads and caches cover art from Spotify CDN URLs |
 | `image_view.py` | Small LVGL cover-art view with a placeholder fallback |
 | `genre_seeds.py` | Static genre preset list when the API seed endpoint is unavailable |
+| `local_speaker.py` | Optional earful Connect speaker in the same process |
 | `keyboard_test.py` | PyDevices keyboard smoke test (LVGL textarea input) |
 
 ## Prerequisites
@@ -88,6 +89,22 @@ library pages: saved albums fail with `memory allocation failed`.
 Cover art needs a JPEG decoder in LVGL: displayif's `jpegio` on MicroPython
 firmware, LVGL's TJPGD on CPython. Without one the view shows
 "Cover unavailable" and list rows omit thumbnails.
+
+## Playing on itself (earful)
+
+With an interpreter that has the [earful](https://github.com/bdbarnett/earful)
+usermod, the remote can also be the speaker. Give it a Connect name as the
+first argument, or set `LOCAL_SPEAKER` in `config.py`:
+
+```bash
+cd /path/to/spotapi
+micropython.exe apps/spotify_remote/main.py earful-win
+```
+
+The process logs in with earful's saved pairing, joins your Connect devices,
+and shows up in **Devices** under that name. Pick it there to play through
+this machine's audio output. Everything else in the UI then controls it.
+Without earful, or with no name given, the remote runs as before.
 
 ## Hardware (ESP32 and other MCUs)
 

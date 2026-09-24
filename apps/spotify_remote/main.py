@@ -44,6 +44,8 @@ from spotify_remote.spotify_ctrl import (  # NOQA
     needs_authorization,
 )
 from spotify_remote.ui import SpotifyUI  # NOQA
+from spotify_remote import config as remote_config  # NOQA
+from spotify_remote import local_speaker  # NOQA
 
 
 def _schedule_poll(ui, controller):
@@ -63,6 +65,12 @@ def poll(ui, controller):
 
 controller = SpotifyController()
 ui = SpotifyUI(controller, on_poll=lambda: poll(ui, controller))
+
+# Optional: this process is also a Connect speaker (earful), listed in Devices.
+_speaker_name = remote_config.LOCAL_SPEAKER
+if len(getattr(sys, "argv", ())) > 1 and sys.argv[1]:
+    _speaker_name = sys.argv[1]
+speaker = local_speaker.start(_speaker_name) if _speaker_name else None
 
 try:
     me = controller.me()
