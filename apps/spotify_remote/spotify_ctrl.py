@@ -517,9 +517,8 @@ class SpotifyController:
             limit = self._recent_limit
         entries = []
         for item in self.client.recently_played(limit=limit):
-            # Playlist entries carry the track under "item" (Feb 2026 API).
-            track = getattr(item, "item", None)
-            if track is None or getattr(track, "type", "track") != "track":
+            track = getattr(item, "track", None)
+            if track is None:
                 continue
             entries.append(self._track_entry(track))
         self._apply_track_saved(entries)
