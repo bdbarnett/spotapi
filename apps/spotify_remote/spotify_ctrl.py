@@ -123,7 +123,7 @@ def friendly_error(error):
 
 def _app_dir():
     try:
-        path = __file__
+        path = __file__.replace("\\", "/")
         if "/" in path:
             return path.rsplit("/", 1)[0]
     except NameError:
