@@ -2,7 +2,7 @@ import gc
 
 import lvgl as lv
 
-_TJPGD_READY = False
+_JPEG_DECODER = None  # "jpegio", "tjpgd", or None until jpeg_supported() finds one
 
 
 def _hex(color):
@@ -59,24 +59,33 @@ def _image_descriptor(path):
 
 def jpeg_supported():
     """Return True when this LVGL build can decode JPEG (Spotify cover art)."""
-    global _TJPGD_READY
-    if not _TJPGD_READY:
+    global _JPEG_DECODER
+    if _JPEG_DECODER is None:
         try:
             # MicroPython firmware: displayif's jpegio registers the decoder
             # (LVGL's own TJPGD is off there). Idempotent; call it explicitly
-            # because not every port registers on import.
+            # because not every port registers on import (displayif#41).
             import jpegio
 
             jpegio.register_lvgl_decoder()
-            _TJPGD_READY = True
+            _JPEG_DECODER = "jpegio"
         except (ImportError, AttributeError, RuntimeError):
             try:
                 # CPython lvgl: LVGL's built-in TJPGD.
                 lv.tjpgd_init()
-                _TJPGD_READY = True
+                _JPEG_DECODER = "tjpgd"
             except AttributeError:
                 pass
-    return _TJPGD_READY
+    return _JPEG_DECODER is not None
+
+
+def jpeg_scalable():
+    """Return True when decoded JPEGs can be scaled.
+
+    jpegio decodes the whole image, so LVGL can transform it. LVGL's TJPGD
+    decodes tile by tile and draws scaled images wrong (lvgl-python#23).
+    """
+    return jpeg_supported() and _JPEG_DECODER == "jpegio"
 
 
 def set_thumbnail(image, path):

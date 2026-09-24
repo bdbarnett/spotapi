@@ -149,7 +149,9 @@ status messages (for example “Queued …”) clear on the next poll.
 - Find supports free-text search via keyboard/textarea and genre presets from the
   dropdown. Returns at most `SEARCH_RESULT_LIMIT` results per request (10 in Dev Mode).
 - Lists draw at once; row thumbnails (Spotify's smallest image) fill in one
-  download at a time afterwards, and show immediately once cached. Without a
-  JPEG decoder, rows omit thumbnails.
+  download at a time afterwards, and show immediately once cached. They need a
+  JPEG decoder that can scale (jpegio on MicroPython); on CPython, LVGL's TJPGD
+  cannot ([lvgl-python#23](https://github.com/PyDevices/lvgl-python/issues/23)),
+  so rows omit thumbnails there.
 - Status messages show as a toast above the footer on every screen and clear
   themselves (errors after 8 s, everything else after 4 s).

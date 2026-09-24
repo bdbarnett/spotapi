@@ -1513,7 +1513,7 @@ class SpotifyUI:
 
             left_pad = 8
             main_w = self._list_w - 8
-            if thumbs and entry.get("art_url") and image_view.jpeg_supported():
+            if thumbs and entry.get("art_url") and image_view.jpeg_scalable():
                 img = lv.image(row)
                 img.set_size(LIST_THUMB, LIST_THUMB)
                 img.align(lv.ALIGN.LEFT_MID, 4, 0)
