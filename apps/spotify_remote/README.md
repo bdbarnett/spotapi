@@ -77,8 +77,12 @@ and `apps/` on `sys.path` itself, so run it from the spotapi repo root:
 
 ```bash
 cd /path/to/spotapi
-micropython apps/spotify_remote/main.py      # or python, micropython.exe, python.exe
+micropython -X heapsize=8M apps/spotify_remote/main.py
+python apps/spotify_remote/main.py           # or micropython.exe / python.exe on Windows
 ```
+
+Give MicroPython an 8 MB heap. The default 2 MB runs out on larger
+library pages: saved albums fail with `memory allocation failed`.
 
 Cover art needs a JPEG decoder in LVGL: displayif's `jpegio` on MicroPython
 firmware, LVGL's TJPGD on CPython. Without one the view shows

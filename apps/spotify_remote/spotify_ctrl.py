@@ -106,13 +106,13 @@ def friendly_error(error):
     if isinstance(error, TransportError):
         status = _http_status(error)
         if status == 401:
-            return "Not authorized — sign in again"
+            return "Not authorized - sign in again"
         if status == 403:
-            return "Permission denied — check app scopes"
+            return "Permission denied - check app scopes"
         if status == 404:
             return "Not found"
         if status == 429:
-            return "Too many requests — wait a moment"
+            return "Too many requests - wait a moment"
         if status and status >= 500:
             return "Spotify service error ({})".format(status)
     message = str(error)
@@ -992,7 +992,7 @@ class SpotifyController:
         if item_type == "track":
             artist = self._artist_names(getattr(item, "artists", None))
             if subtitle_prefix and artist:
-                subtitle = subtitle_prefix + " · " + artist
+                subtitle = subtitle_prefix + " • " + artist
             elif artist:
                 subtitle = artist
         elif item_type == "episode":
@@ -1000,7 +1000,7 @@ class SpotifyController:
             if show is not None:
                 show_name = show.name or ""
                 if subtitle_prefix and show_name:
-                    subtitle = subtitle_prefix + " · " + show_name
+                    subtitle = subtitle_prefix + " • " + show_name
                 elif show_name:
                     subtitle = show_name
         return self._library_entry(

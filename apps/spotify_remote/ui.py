@@ -427,7 +427,7 @@ class SpotifyUI:
         self.track_label.set_width(title_w)
         self.track_label.set_long_mode(LABEL_LONG_DOT)
         self.track_label.set_style_text_color(_hex(TEXT), 0)
-        self.track_label.set_text("—")
+        self.track_label.set_text("-")
         self.track_label.align(lv.ALIGN.TOP_LEFT, details_x, track_y)
 
         track_action_x = details_x + title_w + CHIP_GAP
@@ -979,7 +979,7 @@ class SpotifyUI:
 
     def prompt_for_device(self, message, pending_action=None):
         self._pending_after_device = pending_action
-        self.set_status(message or "No active device — select one to play")
+        self.set_status(message or "No active device - select one to play")
         if self._current_panel != "devices":
             self._push_return(lambda: self._show_now(None))
             self._show_panel("devices")
@@ -989,7 +989,7 @@ class SpotifyUI:
         if is_no_active_device_error(error):
             self._status_is_success = False
             self.prompt_for_device(
-                "No active device — select one to play",
+                "No active device - select one to play",
                 pending_action=pending_action,
             )
             return
@@ -1856,7 +1856,7 @@ class SpotifyUI:
             else:
                 self._browse_artist_albums_entries = tuple(entries)
             self._browse_artist_albums_offset = offset + len(entries)
-            title = "{} — Albums".format(artist["name"])
+            title = "{} - Albums".format(artist["name"])
             load_more = None
             if len(entries) >= page_limit:
                 load_more = lambda: self._open_artist_albums(
@@ -2173,7 +2173,7 @@ class SpotifyUI:
             )
             if not devices:
                 self.device_list.add_text(
-                    "No Spotify Connect devices — open Spotify on a phone or speaker."
+                    "No Spotify Connect devices - open Spotify on a phone or speaker."
                 )
                 _raise_back_button(self.device_back_btn)
                 return
@@ -2359,7 +2359,7 @@ class SpotifyUI:
         else:
             title_query = query
         self.search_title.set_text(
-            "Find: {} · {}".format(title_query, type_label)
+            "Find: {} • {}".format(title_query, type_label)
         )
 
         if not entries:
@@ -2873,7 +2873,7 @@ class SpotifyUI:
         if not self._device_startup_checked:
             self._device_startup_checked = True
             if not state.get("device_id") and not self._device_prompt_dismissed:
-                self.prompt_for_device("No active device — select one to play")
+                self.prompt_for_device("No active device - select one to play")
 
     def _update_aux_controls(self, state):
         shuffle = bool(state.get("shuffle"))
