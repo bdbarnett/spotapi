@@ -126,6 +126,12 @@ and shows up in **Devices** under that name. Pick it there to play through
 this machine's audio output. Everything else in the UI then controls it.
 Without earful, or with no name given, the remote runs as before.
 
+On a board with no codec (an ESP32-S3 panel), set `LOCAL_SPEAKER_OUTPUT =
+"usb"` and the speaker plays through a hosted USB sound card instead, such as
+a P4 running usbif's `soundcard.py`. There's no resampling: the card must
+offer 44.1 kHz ([usbif#35](https://github.com/PyDevices/usbif/issues/35)), and
+if it doesn't the remote says what it does offer and runs without a speaker.
+
 ## Hardware (ESP32 and other MCUs)
 
 1. Flash lvgl_micropython for your board with matching `DISPLAY` and `INDEV`.

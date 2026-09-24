@@ -70,7 +70,11 @@ ui = SpotifyUI(controller, on_poll=lambda: poll(ui, controller))
 _speaker_name = remote_config.LOCAL_SPEAKER
 if len(getattr(sys, "argv", ())) > 1 and sys.argv[1]:
     _speaker_name = sys.argv[1]
-speaker = local_speaker.start(_speaker_name) if _speaker_name else None
+speaker = (
+    local_speaker.start(_speaker_name, output=remote_config.LOCAL_SPEAKER_OUTPUT)
+    if _speaker_name
+    else None
+)
 
 try:
     me = controller.me()

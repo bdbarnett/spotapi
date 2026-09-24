@@ -22,6 +22,11 @@ CRED_FILE = "earful.credentials"
 # plays from it on its own task; this thread only tops it up, so the UI can
 # stall this long (a redraw, a Web API call) without a gap.
 PUMP_RING_SECONDS = 4
+# How long to wait for a hosted USB sound card to enumerate.
+USB_FIND_MS = 15000
+# usbif's host ring (USBIF_UAC_RING in usbif_host_uac.c). The driver does not
+# publish it, and space() must not over-report or write() blocks the UI.
+USB_RING_BYTES = 8192
 
 
 def _load_board_credentials(earful):
@@ -102,6 +107,78 @@ def _pump_output(fmt):
     return _PumpPCM(stream, transport, driver)
 
 
+class _UsbPCM:
+    """earful's view of a hosted USB sound card (usbif.uac_audio output).
+
+    The C host driver drains a small ring onto the bus in real time. space()
+    keeps earful from writing more than fits: UacHostOutput's write waits for
+    room, and waiting here would stall the UI.
+    """
+
+    def __init__(self, host, out):
+        self._host = host  # keep the USB host running while we play
+        self._out = out
+
+    def write(self, buf):
+        return self._out.write(buf)
+
+    def space(self):
+        return max(0, USB_RING_BYTES - 1 - self._out.queued_size())
+
+    def queued_size(self):
+        return self._out.queued_size()
+
+    def service(self):
+        self._out.service()
+
+    def set_volume(self, volume):
+        self._out.set_volume(volume)
+
+    def open(self):
+        self._out.open()
+
+    def close(self):
+        self._out.close()
+        self._host.stop()
+
+
+def _usb_output(fmt):
+    """A hosted USB sound card at fmt, or None when there is none.
+
+    No resampling: the card must offer fmt's rate (earful's is 44.1 kHz), and
+    uac_audio.output raises, listing what the card does offer, if it doesn't.
+    """
+    try:
+        import time
+
+        import usbif.auto
+        from usbif import uac, uac_audio
+    except ImportError:
+        print("local speaker: no usbif in this firmware for a USB sound card")
+        return None
+    host = usbif.auto.host(classes=("uac",)).start()
+    deadline = time.ticks_add(time.ticks_ms(), USB_FIND_MS)
+    while time.ticks_diff(deadline, time.ticks_ms()) > 0:
+        for dev_id, streams in uac_audio.audio_devices():
+            if any(s.direction == uac.OUT for s in streams):
+                try:
+                    out = uac_audio.output(
+                        dev_id, rate=fmt.rate, channels=fmt.channels, bits=fmt.bits
+                    )
+                except ValueError as error:
+                    # Says what the card does offer; usbif#35 adds 44.1 kHz
+                    # to the P4's sound card.
+                    host.stop()
+                    print("local speaker: USB sound card unusable: %s" % (error,))
+                    return None
+                print("local speaker: USB sound card, device %s" % (dev_id,))
+                return _UsbPCM(host, out)
+        time.sleep_ms(250)
+    host.stop()
+    print("local speaker: no USB sound card found")
+    return None
+
+
 class LocalSpeaker:
     def __init__(self, earful, name, device, pcm, fmt):
         self.name = name
@@ -146,8 +223,13 @@ class LocalSpeaker:
         self._pcm.close()
 
 
-def start(name, bitrate=160):
-    """Start a Connect speaker named name; return a LocalSpeaker or None."""
+def start(name, bitrate=160, output=None):
+    """Start a Connect speaker named name; return a LocalSpeaker or None.
+
+    output: None for this machine's own audio (the board's, through the audio
+    pump where the firmware has it, or the host's), "usb" for a hosted USB
+    sound card (an S3 without a codec driving a P4 running soundcard.py).
+    """
     try:
         import earful
     except ImportError:
@@ -163,9 +245,14 @@ def start(name, bitrate=160):
     # Spotify's PCM: 44.1 kHz stereo 16-bit. The default (buffered) host
     # profile rides out the pauses while the UI waits on the Web API.
     fmt = AudioFormat(44100, 2, 16)
-    pcm = _pump_output(fmt)
-    if pcm is None:
-        pcm = pcm_out(fmt)
+    if output == "usb":
+        pcm = _usb_output(fmt)
+        if pcm is None:
+            return None
+    else:
+        pcm = _pump_output(fmt)
+        if pcm is None:
+            pcm = pcm_out(fmt)
     pcm.open()
     _load_board_credentials(earful)
     device = earful.Device(name=name, bitrate=bitrate)

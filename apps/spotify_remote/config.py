@@ -33,3 +33,7 @@ MAX_ROW_ACTIONS = 4
 # usermod), e.g. "earful-win". None leaves it off. The first command-line
 # argument overrides it: micropython.exe apps/spotify_remote/main.py earful-win
 LOCAL_SPEAKER = None
+
+# Where the local speaker's audio goes: None for this machine's own output,
+# "usb" for a hosted USB sound card (e.g. a P4 running usbif's soundcard.py).
+LOCAL_SPEAKER_OUTPUT = None
