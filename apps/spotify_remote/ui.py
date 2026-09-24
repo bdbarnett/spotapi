@@ -1238,8 +1238,7 @@ class SpotifyUI:
             self.search_genre_note.remove_flag(lv.obj.FLAG.HIDDEN)
 
     def _on_genre_dropdown_selected(self, event):
-        dropdown = event.get_target()
-        index = dropdown.get_selected()
+        index = self.search_genre_dropdown.get_selected()
         if index <= 0 or index >= len(self._search_genre_slugs):
             return
         slug = self._search_genre_slugs[index]
