@@ -154,6 +154,7 @@ def _config_path(name):
 CONFIG_PATH = _config_path("spotapi.local.json")
 TOKEN_PATH = _config_path("tokens.json")
 ART_CACHE_PATH = _join_dir(_app_dir(), "art_cache")
+THUMB_CACHE_PATH = _join_dir(_app_dir(), "thumb_cache")
 DEVICE_CACHE_SECONDS = 15
 
 
@@ -202,6 +203,10 @@ class SpotifyController:
         self.art_cache = artwork_cache.ArtworkCache(
             ART_CACHE_PATH,
             max_items=remote_config.ART_CACHE_MAX_ITEMS,
+        )
+        self.thumb_cache = artwork_cache.ArtworkCache(
+            THUMB_CACHE_PATH,
+            max_items=remote_config.THUMB_CACHE_MAX_ITEMS,
         )
         self._me = None
         self._library_cache = {}
@@ -644,7 +649,7 @@ class SpotifyController:
                     "playlist",
                     playlist.id,
                     owned=owned,
-                    art_url=self._best_image_url(getattr(playlist, "images", ())),
+                    art_url=self._thumb_url(getattr(playlist, "images", ())),
                 )
             )
         return entries
@@ -657,7 +662,7 @@ class SpotifyController:
             "artist",
             getattr(artist, "id", None),
             followed=followed,
-            art_url=self._best_image_url(getattr(artist, "images", ())),
+            art_url=self._thumb_url(getattr(artist, "images", ())),
         )
 
     def _album_entry(self, album, saved=None):
@@ -669,7 +674,7 @@ class SpotifyController:
             "album",
             getattr(album, "id", None),
             saved=saved,
-            art_url=self._best_image_url(getattr(album, "images", ())),
+            art_url=self._thumb_url(getattr(album, "images", ())),
         )
 
     def _episode_entry(self, episode, saved=None):
@@ -682,7 +687,7 @@ class SpotifyController:
             "episode",
             getattr(episode, "id", None),
             saved=saved,
-            art_url=self._best_image_url(getattr(episode, "images", ())),
+            art_url=self._thumb_url(getattr(episode, "images", ())),
         )
 
     def _show_entry(self, show):
@@ -693,7 +698,7 @@ class SpotifyController:
             getattr(show, "uri", None),
             "show",
             getattr(show, "id", None),
-            art_url=self._best_image_url(getattr(show, "images", ())),
+            art_url=self._thumb_url(getattr(show, "images", ())),
         )
 
     def _audiobook_entry(self, audiobook, saved=None):
@@ -711,7 +716,7 @@ class SpotifyController:
             "audiobook",
             getattr(audiobook, "id", None),
             saved=saved,
-            art_url=self._best_image_url(getattr(audiobook, "images", ())),
+            art_url=self._thumb_url(getattr(audiobook, "images", ())),
         )
 
     def _search_episode_entries(self, results):
@@ -760,12 +765,11 @@ class SpotifyController:
         return entries
 
     def _track_art_url(self, track):
-        album = getattr(track, "album", None)
-        if album is not None:
-            url = self._best_image_url(getattr(album, "images", ()))
-            if url:
-                return url
-        return self._best_image_url(getattr(track, "images", ()))
+        # Read embedded data only: album-track pages omit "album", and
+        # getattr would fetch every track to fill it in.
+        data = track.raw()
+        album = data.get("album") or {}
+        return self._thumb_url(album.get("images")) or self._thumb_url(data.get("images"))
 
     def _track_entry(self, track, **extra):
         artist = self._artist_names(getattr(track, "artists", None))
@@ -889,15 +893,22 @@ class SpotifyController:
         self._cached_active_device_at = now
         return active
 
-    def _best_image_url(self, images):
-        preferred_width = 300
+    def _thumb_url(self, images):
+        """Smallest image that still fills a list thumbnail."""
+        return self._best_image_url(images, preferred_width=64)
+
+    def _best_image_url(self, images, preferred_width=300):
         best_fit = None
         best_fit_width = -1
         smallest_larger = None
         smallest_larger_width = None
         for image in images or ():
-            url = getattr(image, "url", None)
-            width = getattr(image, "width", None) or 0
+            if isinstance(image, dict):
+                url = image.get("url")
+                width = image.get("width") or 0
+            else:
+                url = getattr(image, "url", None)
+                width = getattr(image, "width", None) or 0
             if not url:
                 continue
             if width <= preferred_width and width > best_fit_width:

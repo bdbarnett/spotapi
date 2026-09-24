@@ -4,6 +4,10 @@
 # Set to 0 to disable the limit.
 ART_CACHE_MAX_ITEMS = 24
 
+# List-row thumbnails (smallest Spotify image, a few KB each) kept on disk
+# under thumb_cache/. Set to 0 to disable the limit.
+THUMB_CACHE_MAX_ITEMS = 300
+
 # Saved library entries loaded per category tab.
 LIBRARY_LIST_LIMIT = 30
 

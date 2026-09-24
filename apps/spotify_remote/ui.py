@@ -220,6 +220,16 @@ def _style_back_button(btn, label):
     btn.set_style_border_width(1, lv.PART.MAIN)
     btn.set_style_border_color(_hex(BORDER), lv.PART.MAIN)
     label.set_style_text_color(_hex(TEXT), lv.PART.MAIN)
+    label.center()
+
+
+def _fit_chip(btn, label, min_width):
+    """Widen a chip to fit its label; return the chip's width."""
+    label.update_layout()
+    width = max(min_width, label.get_width() + 20)
+    btn.set_width(width)
+    label.center()
+    return width
 
 
 def _raise_back_button(btn):
@@ -286,6 +296,9 @@ class SpotifyUI:
         self._pending_after_device = None
         self._device_startup_checked = False
         self._device_prompt_dismissed = False
+        self._thumb_jobs = []
+        self._thumb_refs = {}
+        self._thumb_timer = None
         scr = lv.screen_active()
         self.width, self.height = _screen_size()
         self._build(scr)
@@ -590,12 +603,23 @@ class SpotifyUI:
         self.shuffle_btn.add_event_cb(self._on_shuffle, lv.EVENT.CLICKED, None)
         self.repeat_btn.add_event_cb(self._on_repeat, lv.EVENT.CLICKED, None)
 
-        self.status_label = lv.label(self.now_panel)
-        self.status_label.set_width(label_width)
+        # A toast on the top layer, so it shows over every panel.
+        self.status_label = lv.label(lv.layer_top())
+        self.status_label.set_width(lv.SIZE_CONTENT)
+        self.status_label.set_style_max_width(content_width - 48, 0)
         self.status_label.set_long_mode(LABEL_LONG_DOT)
+        self.status_label.set_style_bg_color(_hex(SURFACE), 0)
+        self.status_label.set_style_bg_opa(lv.OPA.COVER, 0)
+        self.status_label.set_style_border_width(1, 0)
+        self.status_label.set_style_border_color(_hex(BORDER), 0)
+        self.status_label.set_style_radius(8, 0)
+        self.status_label.set_style_pad_hor(12, 0)
+        self.status_label.set_style_pad_ver(6, 0)
         self.status_label.set_text("")
         self.status_label.set_style_text_color(_hex(MUTED), 0)
-        self.status_label.align(lv.ALIGN.BOTTOM_MID, 0, -8)
+        self.status_label.align(lv.ALIGN.BOTTOM_MID, 0, -(footer_h + 12))
+        self.status_label.add_flag(lv.obj.FLAG.HIDDEN)
+        self._status_timer = None
 
         vol_btn_size = 44
         vol_pad = 8
@@ -644,7 +668,6 @@ class SpotifyUI:
         self._list_y = PANEL_HEADER_H + 4
         self._scroll_h = content_height - self._scroll_y - 8
         self._scroll_h_no_hub = content_height - self._list_y - 8
-        self._device_list_h = content_height - PANEL_HEADER_H - 8
         self._search_query_y = PANEL_HEADER_H
         self._search_type_y = PANEL_HEADER_H + QUERY_ROW_H + 4
         self._search_genre_y = self._search_type_y + HUB_ROW_H + 4
@@ -705,51 +728,57 @@ class SpotifyUI:
         self.search_title.set_text("Find")
         self.search_back_btn.add_event_cb(self._nav_back, lv.EVENT.CLICKED, None)
 
+        # Size the Find rows from the panel's real content width (the theme
+        # pads the panel), so the field, button and dropdown stay inside it.
+        self.search_panel.update_layout()
+        inner_w = self.search_panel.get_content_width()
+        # Line the field up with the type chips (the hub is centred, _list_w wide).
+        query_x = HUB_CHIP_X + (inner_w - self._list_w) // 2
+        search_btn_w = 80
+
         self.search_query_row = lv.obj(self.search_panel)
-        self.search_query_row.set_size(content_width - 16, QUERY_ROW_H)
-        self.search_query_row.align(lv.ALIGN.TOP_MID, 0, self._search_query_y)
+        self.search_query_row.set_size(inner_w, QUERY_ROW_H)
+        self.search_query_row.align(lv.ALIGN.TOP_LEFT, 0, self._search_query_y)
         self.search_query_row.set_style_bg_opa(lv.OPA.TRANSP, 0)
         self.search_query_row.set_style_border_width(0, 0)
+        self.search_query_row.set_style_pad_all(0, 0)
         self.search_query_row.remove_flag(lv.obj.FLAG.SCROLLABLE)
 
-        query_w = content_width - 16 - 80 - CHIP_GAP
+        query_w = inner_w - query_x - search_btn_w - CHIP_GAP
         self.search_textarea = lv.textarea(self.search_query_row)
         self.search_textarea.set_size(max(120, query_w), CHIP_H + 8)
-        self.search_textarea.align(lv.ALIGN.LEFT_MID, HUB_CHIP_X - 8, 0)
+        self.search_textarea.align(lv.ALIGN.LEFT_MID, query_x, 0)
         self.search_textarea.set_one_line(True)
         self.search_textarea.set_placeholder_text("Search...")
         self.search_search_btn, _ = self._action_chip(
             self.search_query_row,
             "Search",
-            HUB_CHIP_X + max(120, query_w) + CHIP_GAP,
-            (QUERY_ROW_H - CHIP_H) // 2,
-            72,
-            CHIP_H,
+            0,
+            0,
+            search_btn_w,
+            CHIP_H + 8,
             self._on_search_submit,
         )
+        self.search_search_btn.align(lv.ALIGN.RIGHT_MID, 0, 0)
         self.search_search_btn.remove_flag(lv.obj.FLAG.HIDDEN)
 
         self.search_type_hub.align(lv.ALIGN.TOP_MID, 0, self._search_type_y)
         _enable_horizontal_scroll(self.search_type_hub)
 
         self.search_genre_dropdown = lv.dropdown(self.search_panel)
-        self.search_genre_dropdown.set_size(content_width - 32, GENRE_ROW_H)
-        self.search_genre_dropdown.align(lv.ALIGN.TOP_LEFT, 16, self._search_genre_y)
+        self.search_genre_dropdown.set_size(inner_w - query_x, GENRE_ROW_H)
+        self.search_genre_dropdown.align(lv.ALIGN.TOP_LEFT, query_x, self._search_genre_y)
         _style_base(self.search_genre_dropdown)
         self.search_genre_dropdown.set_style_bg_color(_hex(SURFACE), lv.PART.MAIN)
         self.search_genre_dropdown.set_style_border_width(1, lv.PART.MAIN)
         self.search_genre_dropdown.set_style_border_color(_hex(BORDER), lv.PART.MAIN)
+        self.search_genre_dropdown.set_style_text_color(_hex(MUTED), lv.PART.MAIN)
+        self.search_genre_dropdown.set_style_pad_hor(10, lv.PART.MAIN)
+        self.search_genre_dropdown.set_style_pad_ver(8, lv.PART.MAIN)
         self.search_genre_dropdown.add_event_cb(
             self._on_genre_dropdown_selected, lv.EVENT.VALUE_CHANGED, None
         )
 
-        self.search_genre_note = lv.label(self.search_panel)
-        self.search_genre_note.set_width(content_width - 32)
-        self.search_genre_note.set_long_mode(LABEL_LONG_DOT)
-        self.search_genre_note.set_style_text_color(_hex(MUTED), 0)
-        self.search_genre_note.set_text("")
-        self.search_genre_note.align(lv.ALIGN.TOP_LEFT, 16, self._search_genre_y + GENRE_ROW_H - 4)
-        self.search_genre_note.add_flag(lv.obj.FLAG.HIDDEN)
 
         self.search_scroll.align(lv.ALIGN.TOP_MID, 0, self._search_scroll_y)
         self.search_scroll.set_size(self._list_w, self._search_scroll_h)
@@ -784,35 +813,26 @@ class SpotifyUI:
         self.artist_picker_panel.add_flag(lv.obj.FLAG.HIDDEN)
         self.artist_picker_back_btn.add_event_cb(self._artist_picker_back, lv.EVENT.CLICKED, None)
 
-        self.devices_panel = lv.obj(parent)
-        self.devices_panel.set_size(content_width, content_height)
-        self.devices_panel.align(lv.ALIGN.TOP_MID, 0, panel_y)
-        self.devices_panel.set_style_bg_color(_hex(PANEL), 0)
-        self.devices_panel.set_style_border_width(0, 0)
+        (
+            self.devices_panel,
+            self.devices_title,
+            self.device_scroll,
+            _devices_hub,
+            self.device_back_btn,
+        ) = self._build_list_panel(parent, content_width, content_height, panel_y)
         self.devices_panel.add_flag(lv.obj.FLAG.HIDDEN)
-
-        self.device_list = lv.list(self.devices_panel)
-        self.device_list.set_size(self._list_w, self._device_list_h)
-        self.device_list.align(lv.ALIGN.TOP_MID, 0, PANEL_HEADER_H + 44)
+        self.devices_title.set_text("Devices")
+        self.device_back_btn.add_event_cb(self._nav_back, lv.EVENT.CLICKED, None)
 
         self.device_refresh_btn = lv.button(self.devices_panel)
-        self.device_refresh_btn.set_size(72, PANEL_BACK_H)
-        self.device_refresh_btn.align(lv.ALIGN.TOP_LEFT, PANEL_TITLE_X, 8)
+        self.device_refresh_btn.set_size(88, PANEL_BACK_H)
+        self.device_refresh_btn.align(lv.ALIGN.TOP_RIGHT, -8, 8)
         self.device_refresh_btn.add_event_cb(
             lambda _e: self.load_devices(), lv.EVENT.CLICKED, None
         )
         refresh_label = lv.label(self.device_refresh_btn)
         refresh_label.set_text("Refresh")
         _style_back_button(self.device_refresh_btn, refresh_label)
-
-        self.device_back_btn = lv.button(self.devices_panel)
-        self.device_back_btn.set_size(PANEL_BACK_W, PANEL_BACK_H)
-        self.device_back_btn.align(lv.ALIGN.TOP_LEFT, 8, 8)
-        self.device_back_btn.add_event_cb(self._nav_back, lv.EVENT.CLICKED, None)
-        device_back_label = lv.label(self.device_back_btn)
-        device_back_label.set_text("Back")
-        _style_back_button(self.device_back_btn, device_back_label)
-        _raise_back_button(self.device_back_btn)
 
         self._panel_backs = {
             "library": self.library_back_btn,
@@ -1190,7 +1210,7 @@ class SpotifyUI:
             )
             btn.remove_flag(lv.obj.FLAG.HIDDEN)
             self._library_hub_buttons[category] = (btn, label)
-            x += chip_w + CHIP_GAP
+            x += _fit_chip(btn, label, chip_w) + CHIP_GAP
         self._style_library_hub()
 
     def _style_library_hub(self):
@@ -1225,17 +1245,13 @@ class SpotifyUI:
             self._run_search(text, genre_preset=False)
 
     def _populate_genre_dropdown(self, genres):
-        options = ["Genre preset..."]
+        from_api = self.controller.genres_from_api()
+        options = ["Genre preset..." if from_api else "Genre preset (offline list)..."]
         self._search_genre_slugs = ("",) + tuple(genres)
         for slug in genres:
             options.append(_genre_label(slug))
         self.search_genre_dropdown.set_options("\n".join(options))
         self.search_genre_dropdown.set_selected(0)
-        if self.controller.genres_from_api():
-            self.search_genre_note.add_flag(lv.obj.FLAG.HIDDEN)
-        else:
-            self.search_genre_note.set_text("Offline genre list")
-            self.search_genre_note.remove_flag(lv.obj.FLAG.HIDDEN)
 
     def _on_genre_dropdown_selected(self, event):
         index = self.search_genre_dropdown.get_selected()
@@ -1285,7 +1301,7 @@ class SpotifyUI:
             )
             btn.remove_flag(lv.obj.FLAG.HIDDEN)
             self._search_type_buttons[type_id] = (btn, btn_label)
-            x += type_chip_w + CHIP_GAP
+            x += _fit_chip(btn, btn_label, type_chip_w) + CHIP_GAP
         self._style_search_type_buttons()
 
         def load_genres():
@@ -1479,7 +1495,9 @@ class SpotifyUI:
             return
         y = 0
         for entry in entries:
-            is_now = highlight_now or entry.get("now_playing") or self._now_playing_match(entry)
+            is_now = entry.get("now_playing") or (
+                highlight_now and self._now_playing_match(entry)
+            )
             row_actions = actions(entry) if callable(actions) else self._visible_actions(actions, entry)
             row_h = ROW_HEIGHT
             if row_actions and len(row_actions) > remote_config.MAX_ROW_ACTIONS:
@@ -1496,17 +1514,14 @@ class SpotifyUI:
             left_pad = 8
             main_w = self._list_w - 8
             if thumbs and entry.get("art_url") and image_view.jpeg_supported():
-                art_path = self.controller.art_cache.path_for_url(entry["art_url"])
-                if art_path:
-                    try:
-                        img = lv.image(row)
-                        img.set_size(LIST_THUMB, LIST_THUMB)
-                        img.align(lv.ALIGN.LEFT_MID, 4, 0)
-                        img.set_src(art_path)
-                        left_pad = LIST_THUMB + THUMB_GAP + 8
-                        main_w -= LIST_THUMB + THUMB_GAP
-                    except Exception:
-                        pass
+                img = lv.image(row)
+                img.set_size(LIST_THUMB, LIST_THUMB)
+                img.align(lv.ALIGN.LEFT_MID, 4, 0)
+                img.set_style_bg_color(_hex(ART_PANEL), 0)
+                img.set_style_bg_opa(lv.OPA.COVER, 0)
+                self._queue_thumb(scroll, img, entry["art_url"])
+                left_pad = LIST_THUMB + THUMB_GAP + 8
+                main_w -= LIST_THUMB + THUMB_GAP
 
             action_w = 0
             if row_actions:
@@ -1630,6 +1645,7 @@ class SpotifyUI:
 
     def _show_devices(self, _event):
         self._push_return(lambda: self._show_now(None))
+        self._set_active_tab(None)
         self._show_panel("devices")
         self.load_devices()
 
@@ -1655,6 +1671,7 @@ class SpotifyUI:
     def _show_search(self, _event, push_return=True):
         if push_return:
             self._push_return(lambda: self._show_now(None))
+        self._set_active_tab(None)
         self._show_panel("search")
         self._build_search_hub()
         lv.group_focus_obj(self.search_textarea)
@@ -1678,7 +1695,40 @@ class SpotifyUI:
     def _artist_picker_back(self, _event):
         self._pop_return()
 
+    def _queue_thumb(self, scroll, img, url):
+        """Show a row thumbnail: now if cached, else from a background download."""
+        path = self.controller.thumb_cache.cached_path(url)
+        if path:
+            self._show_thumb(scroll, img, path)
+            return
+        self._thumb_jobs.append((scroll, img, url))
+        if self._thumb_timer is None:
+            self._thumb_timer = lv.timer_create(self._thumb_tick, 30, None)
+
+    def _show_thumb(self, scroll, img, path):
+        try:
+            ref = image_view.set_thumbnail(img, path)
+        except Exception:
+            ref = None
+        if ref is not None:
+            self._thumb_refs.setdefault(id(scroll), []).append(ref)
+
+    def _thumb_tick(self, _timer):
+        # One download per tick keeps the UI responsive while a list fills in.
+        if not self._thumb_jobs:
+            self._thumb_timer.delete()
+            self._thumb_timer = None
+            return
+        scroll, img, url = self._thumb_jobs.pop(0)
+        try:
+            path = self.controller.thumb_cache.path_for_url(url)
+        except Exception:
+            return
+        self._show_thumb(scroll, img, path)
+
     def _clear_scroll(self, scroll):
+        self._thumb_jobs = [job for job in self._thumb_jobs if job[0] is not scroll]
+        self._thumb_refs.pop(id(scroll), None)
         count = scroll.get_child_count()
         for index in range(count):
             scroll.get_child(0).delete()
@@ -1792,7 +1842,22 @@ class SpotifyUI:
 
         def on_ok(result):
             entries, album_saved = result
+            album_entry = {"uri": "spotify:album:" + album_id}
             hub = [
+                {
+                    "text": "Play",
+                    "width": 72,
+                    "handler": lambda _event: self._run_action(
+                        self._action_play_album, album_entry, go_now=True
+                    ),
+                },
+                {
+                    "text": "Shuffle",
+                    "width": 88,
+                    "handler": lambda _event: self._run_action(
+                        self._action_shuffle_play, album_entry, go_now=True
+                    ),
+                },
                 {
                     "text": "Save",
                     "width": 72,
@@ -1918,10 +1983,14 @@ class SpotifyUI:
     def _open_playlist_tracks(self, entry, back_panel="library"):
         self._browse_back_panel = back_panel
         self._browse_playlist_id = entry["id"]
-        try:
+
+        def work():
             owned = self.controller.playlist_is_owned(entry["id"])
+            return owned, self.controller.playlist_tracks(entry["id"], owned=owned)
+
+        def on_ok(result):
+            owned, entries = result
             self._browse_playlist_owned = owned
-            entries = self.controller.playlist_tracks(entry["id"], owned=owned)
             hub = [
                 {
                     "text": "Play",
@@ -1953,8 +2022,16 @@ class SpotifyUI:
                 hub_actions=hub,
                 row_actions=self._track_action_specs(include_remove=owned),
             )
-        except Exception as error:
-            self.set_status(str(error))
+
+        def on_err(error):
+            self.set_status(friendly_error(error), kind="error")
+
+        self._run_async(
+            work,
+            on_ok=on_ok,
+            on_err=on_err,
+            loading_panel=getattr(self, back_panel + "_panel", None),
+        )
 
     def _open_playlist_picker(self, track_uri, return_handler=None):
         self._playlist_track_uri = track_uri
@@ -2150,49 +2227,31 @@ class SpotifyUI:
     def _on_seek_fwd(self, _event):
         self._run_transport(lambda: self.controller.seek_relative(15000))
 
-    def _recreate_list(self, attr, parent, height, y_offset):
-        old_list = getattr(self, attr)
-        old_list.delete()
-        gc.collect()
-        new_list = lv.list(parent)
-        new_list.set_size(self._list_w, height)
-        new_list.align(lv.ALIGN.TOP_MID, 0, y_offset)
-        setattr(self, attr, new_list)
-        return new_list
-
     def load_devices(self):
         def work():
             return self.controller.available_devices()
 
         def on_ok(devices):
-            self._recreate_list(
-                "device_list",
-                self.devices_panel,
-                self._device_list_h,
-                PANEL_HEADER_H + 44,
-            )
             if not devices:
-                self.device_list.add_text(
-                    "No Spotify Connect devices - open Spotify on a phone or speaker."
+                self._show_empty_state(
+                    self.device_scroll,
+                    "No Spotify Connect devices - open Spotify on a phone or speaker.",
                 )
-                _raise_back_button(self.device_back_btn)
                 return
-            active_id = self._now_state.get("device_id")
-            for entry in devices:
-                name = entry["name"]
-                device_type = entry.get("type") or ""
-                if device_type:
-                    name = "[{}] {}".format(device_type, name)
-                if entry["active"]:
-                    name = "> " + name
-                item = self.device_list.add_button(None, name)
-                device_id = entry["id"]
-                item.add_event_cb(
-                    lambda event, device_id=device_id: self._on_device_selected(device_id),
-                    lv.EVENT.CLICKED,
-                    None,
-                )
-            _raise_back_button(self.device_back_btn)
+            entries = [
+                {
+                    "title": device["name"],
+                    "subtitle": device.get("type") or "",
+                    "id": device["id"],
+                    "now_playing": bool(device["active"]),
+                }
+                for device in devices
+            ]
+            self._populate_entry_scroll(
+                self.device_scroll,
+                entries,
+                on_primary=lambda entry: self._on_device_selected(entry["id"]),
+            )
 
         def on_err(error):
             self.set_status(friendly_error(error), kind="error")
@@ -2748,17 +2807,34 @@ class SpotifyUI:
         self.device_btn_label.set_text(name or "Device")
 
     def set_status(self, text, kind="info"):
+        if self._status_timer is not None:
+            self._status_timer.delete()
+            self._status_timer = None
         self.status_label.set_text(text or "")
+        if not text:
+            self.status_label.add_flag(lv.obj.FLAG.HIDDEN)
+            return
         if kind == "success":
             self.status_label.set_style_text_color(_hex(SUCCESS), 0)
         elif kind == "error":
             self.status_label.set_style_text_color(_hex(ERROR), 0)
         else:
             self.status_label.set_style_text_color(_hex(MUTED), 0)
+        self.status_label.remove_flag(lv.obj.FLAG.HIDDEN)
+        # Errors stay longer; nothing stays forever.
+        timeout = 8000 if kind == "error" else 4000
+        self._status_timer = lv.timer_create(self._on_status_timeout, timeout, None)
+
+    def _on_status_timeout(self, _timer):
+        self._status_timer.delete()
+        self._status_timer = None
+        self.status_label.set_text("")
+        self.status_label.add_flag(lv.obj.FLAG.HIDDEN)
+        self._status_is_success = False
 
     def clear_success_status(self):
         if self._status_is_success:
-            self.status_label.set_text("")
+            self.set_status("")
             self._status_is_success = False
 
     def _set_track_actions_visible(self, visible):

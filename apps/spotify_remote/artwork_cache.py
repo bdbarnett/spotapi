@@ -56,15 +56,21 @@ class ArtworkCache:
     def path_for_url(self, url):
         if not url:
             return None
+        path = self.cached_path(url)
+        if path:
+            return path
+        return self._download(url, _simple_hash(url), _extension_from_url(url))
 
-        fallback_ext = _extension_from_url(url)
+    def cached_path(self, url):
+        """Return the cached file for url, or None; never downloads."""
+        if not url:
+            return None
         base = _simple_hash(url)
-        for ext in ("jpg", "png", "bmp", fallback_ext):
+        for ext in ("jpg", "png", "bmp", _extension_from_url(url)):
             path = self._cache_path(base, ext)
             if _exists(path):
                 return path
-
-        return self._download(url, base, fallback_ext)
+        return None
 
     def _download(self, url, base, fallback_ext):
         _mkdir(self.directory)

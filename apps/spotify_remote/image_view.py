@@ -79,6 +79,20 @@ def jpeg_supported():
     return _TJPGD_READY
 
 
+def set_thumbnail(image, path):
+    """Show a cached image file in image, scaled to fit its size.
+
+    Returns the (descriptor, data) pair the caller must keep alive while the
+    image shows it, or None when the file cannot be shown.
+    """
+    descriptor, data = _image_descriptor(path)
+    if descriptor is None:
+        return None
+    image.set_src(descriptor)
+    image.set_inner_align(lv.image.ALIGN.CONTAIN)
+    return descriptor, data
+
+
 class CoverArtView:
     def __init__(self, parent, size, bg_color, text_color):
         self.size = size

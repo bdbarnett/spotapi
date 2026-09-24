@@ -55,6 +55,7 @@ Cover art is cached under `art_cache/` beside the app. The cache is gitignored
 and reused across app restarts. Limits are set in `config.py`:
 
 - `ART_CACHE_MAX_ITEMS` — max cover-art files on disk (oldest removed first; `0` = unlimited)
+- `THUMB_CACHE_MAX_ITEMS` — max list thumbnails under `thumb_cache/` (same rules)
 - `LIBRARY_LIST_LIMIT` — entries loaded per library category tab
 - `BROWSE_LIST_LIMIT` — entries loaded in album and playlist browse views
 - `ARTIST_ALBUMS_PAGE_LIMIT` — artist discography page size (Dev Mode max is 10)
@@ -147,5 +148,8 @@ status messages (for example “Queued …”) clear on the next poll.
   is unavailable in Spotify Development Mode. Use **Albums** or library browse instead.
 - Find supports free-text search via keyboard/textarea and genre presets from the
   dropdown. Returns at most `SEARCH_RESULT_LIMIT` results per request (10 in Dev Mode).
-- If LVGL cannot decode a cached image path on the active runtime, list rows
-  omit thumbnails rather than failing the screen.
+- Lists draw at once; row thumbnails (Spotify's smallest image) fill in one
+  download at a time afterwards, and show immediately once cached. Without a
+  JPEG decoder, rows omit thumbnails.
+- Status messages show as a toast above the footer on every screen and clear
+  themselves (errors after 8 s, everything else after 4 s).
