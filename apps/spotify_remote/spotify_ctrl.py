@@ -131,6 +131,21 @@ def _app_dir():
     return os.getcwd()
 
 
+def _data_dir():
+    """Where config, tokens and caches live.
+
+    The app's own directory when it runs from source. Frozen into firmware
+    it has none (its __file__ names no real directory), so it uses the
+    directory it was launched from.
+    """
+    app_dir = _app_dir()
+    try:
+        os.stat(app_dir)
+        return app_dir
+    except OSError:
+        return os.getcwd().replace("\\", "/")
+
+
 def _join_dir(directory, name):
     if directory.endswith("/"):
         return directory + name
@@ -141,8 +156,8 @@ def _config_path(name):
     """Prefer app-local config, falling back when Windows cannot follow its WSL symlink."""
     # Open rather than stat: over \\wsl.localhost a symlink stats fine but
     # cannot be opened.
-    app_path = _join_dir(_app_dir(), name)
-    for path in (app_path, _join_dir(_app_dir(), "../../" + name)):
+    app_path = _join_dir(_data_dir(), name)
+    for path in (app_path, _join_dir(_data_dir(), "../../" + name)):
         try:
             open(path, "rb").close()
             return path
@@ -153,8 +168,8 @@ def _config_path(name):
 
 CONFIG_PATH = _config_path("spotapi.local.json")
 TOKEN_PATH = _config_path("tokens.json")
-ART_CACHE_PATH = _join_dir(_app_dir(), "art_cache")
-THUMB_CACHE_PATH = _join_dir(_app_dir(), "thumb_cache")
+ART_CACHE_PATH = _join_dir(_data_dir(), "art_cache")
+THUMB_CACHE_PATH = _join_dir(_data_dir(), "thumb_cache")
 DEVICE_CACHE_SECONDS = 15
 
 

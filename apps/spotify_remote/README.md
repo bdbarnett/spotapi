@@ -18,6 +18,7 @@ Windows) under the PyDevices stack.
 | `artwork_cache.py` | Downloads and caches cover art from Spotify CDN URLs |
 | `image_view.py` | Small LVGL cover-art view with a placeholder fallback |
 | `genre_seeds.py` | Static genre preset list when the API seed endpoint is unavailable |
+| `__main__.py` | `-m spotify_remote` entry point (runs the loop itself) |
 | `local_speaker.py` | Optional earful Connect speaker in the same process |
 | `keyboard_test.py` | PyDevices keyboard smoke test (LVGL textarea input) |
 
@@ -89,6 +90,25 @@ library pages: saved albums fail with `memory allocation failed`.
 Cover art needs a JPEG decoder in LVGL: displayif's `jpegio` on MicroPython
 firmware, LVGL's TJPGD on CPython. Without one the view shows
 "Cover unavailable" and list rows omit thumbnails.
+
+## Frozen into firmware
+
+[`manifest.py`](../../manifest.py) at the repo root freezes spotapi and this
+app. [`manifests/kitchen-sink-earful.py`](../../manifests/kitchen-sink-earful.py)
+adds them to the PyDevices kitchen sink and earful, for a `micropython.exe`
+(or board image) that is both the remote and the speaker. Run it from any
+directory holding `spotapi.local.json` and `tokens.json`; the art caches are
+written there too:
+
+```bash
+micropython.exe -m spotify_remote earful-win
+```
+
+Use `-m spotify_remote`, not `-m spotify_remote.main`: under `-m` appdev does
+not keep the app alive after the script, so the package's `__main__.py` runs
+the loop itself. The PyDevices Python stack (`displaydev`, `audiodev`, …) still
+loads from `~/.micropython/lib` until pydevices publishes a freeze manifest
+([pydevices#75](https://github.com/PyDevices/pydevices/issues/75)).
 
 ## Playing on itself (earful)
 
