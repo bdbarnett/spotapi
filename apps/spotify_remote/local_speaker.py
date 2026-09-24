@@ -18,6 +18,10 @@ import lvgl as lv
 
 PUMP_MS = 10
 CRED_FILE = "earful.credentials"
+# On a board with audiodev's audio pump, how much PCM its ring holds. The pump
+# plays from it on its own task; this thread only tops it up, so the UI can
+# stall this long (a redraw, a Web API call) without a gap.
+PUMP_RING_SECONDS = 4
 
 
 def _load_board_credentials(earful):
@@ -28,6 +32,74 @@ def _load_board_credentials(earful):
             earful.set_credentials(file.read())
     except OSError:
         print("local speaker: no %s; pair once from the phone" % CRED_FILE)
+
+
+class _PumpPCM:
+    """earful's view of an audiodev pump stream.
+
+    earful's attach() calls write/space/service/set_volume as real methods
+    (it looks them up in C, so no __getattr__). The pump's C task drains the
+    ring into I2S; the board transport is never opened -- the pump owns the
+    peripheral -- and is kept only for its codec volume.
+    """
+
+    def __init__(self, stream, transport, driver):
+        self._stream = stream
+        self._transport = transport
+        self.driver = driver
+
+    def write(self, buf):
+        return self._stream.write(buf)
+
+    def space(self):
+        return self._stream.space()
+
+    def queued_size(self):
+        return self._stream.level()
+
+    def service(self):
+        pass
+
+    def set_volume(self, volume):
+        self._transport.set_volume(volume)
+
+    def open(self):
+        pass
+
+    def close(self):
+        self._stream.deinit()
+
+
+def _pump_output(fmt):
+    """A pump stream on this board, or None to use the board's pcm_out()."""
+    try:
+        from audiodev import pump
+    except ImportError:
+        return None
+    mod = pump.module()
+    if mod is None or not hasattr(mod, "Ring") or not pump.on_board():
+        return None
+    from boarddev import pcm_out
+
+    # The transport publishes the board's I2S pins and codec power; find it
+    # the way audiodev's AudioOut does, through any wrappers.
+    transport = pcm_out(fmt)
+    while transport is not None and getattr(transport, "wire", None) is None:
+        transport = getattr(transport, "_inner", None)
+    if transport is None:
+        return None
+    driver = pump.BusioDriver(
+        transport.wire,
+        fmt,
+        power=getattr(transport, "audio_power", None),
+        volume=transport.volume,
+        transport=transport,
+    )
+    frames = 256
+    capacity = max(2, fmt.rate * PUMP_RING_SECONDS // frames)
+    stream = pump.attach_stream(fmt, driver=driver, frames=frames, capacity=capacity)
+    print("local speaker: audio pump, %d s ring" % PUMP_RING_SECONDS)
+    return _PumpPCM(stream, transport, driver)
 
 
 class LocalSpeaker:
@@ -91,7 +163,9 @@ def start(name, bitrate=160):
     # Spotify's PCM: 44.1 kHz stereo 16-bit. The default (buffered) host
     # profile rides out the pauses while the UI waits on the Web API.
     fmt = AudioFormat(44100, 2, 16)
-    pcm = pcm_out(fmt)
+    pcm = _pump_output(fmt)
+    if pcm is None:
+        pcm = pcm_out(fmt)
     pcm.open()
     _load_board_credentials(earful)
     device = earful.Device(name=name, bitrate=bitrate)
