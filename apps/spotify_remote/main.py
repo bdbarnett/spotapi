@@ -51,6 +51,7 @@ if _loop is not None and hasattr(_loop, "max_yield_ms"):
 # ---------------------------------------------------------------------------
 
 from spotify_remote.spotify_ctrl import (  # NOQA
+    _http_status,
     SpotifyController,
     friendly_error,
     is_transient_error,
@@ -61,11 +62,20 @@ from spotify_remote import config as remote_config  # NOQA
 from spotify_remote import local_speaker  # NOQA
 
 
+# After a rate-limited poll (HTTP 429), this many 5 s polls are skipped (30 s).
+# Polling on through a rate limit kept the app limited (LCD-7, 2026-09-25).
+POLL_BACKOFF_POLLS = 6
+_poll_skip = 0
+
+
 def poll(ui, controller):
     """Refresh now-playing on the worker; the screen updates when it lands."""
 
     def done(state, error):
+        global _poll_skip
         if error is not None:
+            if _http_status(error) == 429:
+                _poll_skip = POLL_BACKOFF_POLLS
             ui._status_is_success = False
             ui.set_status(friendly_error(error), kind="error")
             return
@@ -97,7 +107,11 @@ _speaker_name = remote_config.LOCAL_SPEAKER
 if len(getattr(sys, "argv", ())) > 1 and sys.argv[1]:
     _speaker_name = sys.argv[1]
 speaker = (
-    local_speaker.start(_speaker_name, output=remote_config.LOCAL_SPEAKER_OUTPUT)
+    local_speaker.start(
+        _speaker_name,
+        output=remote_config.LOCAL_SPEAKER_OUTPUT,
+        volume=getattr(remote_config, "LOCAL_SPEAKER_VOLUME", None),
+    )
     if _speaker_name
     else None
 )
@@ -119,6 +133,14 @@ except Exception as error:
 
 
 def _poll_timer(_timer):
+    global _poll_skip
+    # Nothing to show while the sign-in / unavailable overlay is up; it
+    # retries on its own (SpotifyUI.show_auth_error).
+    if not ui._auth_ok:
+        return
+    if _poll_skip > 0:
+        _poll_skip -= 1
+        return
     if not ui.worker.pending("poll"):
         poll(ui, controller)
 

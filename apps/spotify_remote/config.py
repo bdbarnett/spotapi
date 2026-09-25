@@ -54,3 +54,9 @@ LOCAL_SPEAKER = None
 # Where the local speaker's audio goes: None for this machine's own output,
 # "usb" for a hosted USB sound card (e.g. a P4 running usbif's soundcard.py).
 LOCAL_SPEAKER_OUTPUT = None
+
+# The local speaker's volume (0-100) when it starts; None keeps earful's
+# default of 100. It is what the speaker reports to Spotify until the phone
+# sets another. At 100 the LCD-7 into a P4 sound card overdrove the P4's amp
+# after every reboot.
+LOCAL_SPEAKER_VOLUME = 75

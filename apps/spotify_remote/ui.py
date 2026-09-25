@@ -282,6 +282,27 @@ def _style_link_button(btn, label):
         label.add_style(_style("text"), lv.PART.MAIN)
 
 
+# The volume slider moves in the steps Spotify's phone app uses: one press
+# of a phone volume button moves Connect volume by 3072 of 0-65535 (measured
+# 2026-09-25: 65535, 62463, 59391, 56319), so the levels are 65535 - n*3072
+# and 0. The Web API takes whole percent, so they are kept as percent:
+# 0, 2, 6, 11, ... 86, 91, 95, 100.
+VOLUME_STEP_RAW = 3072
+VOLUME_LEVELS = [0] + sorted(
+    ((65535 - n * VOLUME_STEP_RAW) * 100 + 32767) // 65535   # rounded
+    for n in range(65535 // VOLUME_STEP_RAW + 1)
+)
+
+
+def _volume_index(percent):
+    """The slider position of the phone level nearest percent."""
+    best = 0
+    for i, level in enumerate(VOLUME_LEVELS):
+        if abs(level - percent) < abs(VOLUME_LEVELS[best] - percent):
+            best = i
+    return best
+
+
 # Progressive list building: rows built at once, then per 15 ms LVGL tick.
 # Each row is ~30 ms to build and ~15 ms to lay out and draw on an ESP32-S3,
 # so these bound how long one tick holds the screen (~200 ms, then ~100 ms).
@@ -780,8 +801,8 @@ class SpotifyUI:
         self.volume_slider = lv.slider(self.volume_popup)
         self.volume_slider.set_size(vol_slider_w, vol_slider_h)
         self.volume_slider.align(lv.ALIGN.CENTER, 0, 0)
-        self.volume_slider.set_range(0, 100)
-        self.volume_slider.set_value(50, ANIM_OFF)
+        self.volume_slider.set_range(0, len(VOLUME_LEVELS) - 1)
+        self.volume_slider.set_value(_volume_index(50), ANIM_OFF)
         if hasattr(self.volume_slider, "set_orientation") and hasattr(lv, "SLIDER_ORIENTATION"):
             self.volume_slider.set_orientation(lv.SLIDER_ORIENTATION.VERTICAL)
         _style_slim_slider(self.volume_slider)
@@ -1229,24 +1250,56 @@ class SpotifyUI:
         _style_chip(self.auth_retry_btn, self.auth_retry_label, active=True, fresh=True)
         self._auth_retry_mode = "authorize"
 
+    # A transient failure (429, 5xx) retries on its own, 5 s after the error
+    # and then less often, up to once a minute: the Retry button used to be
+    # the only way back, and a rate limit at boot left the LCD-7 stuck on
+    # this overlay (2026-09-25). A tap still retries at once.
+    AUTH_RETRY_FIRST_S = 5
+    AUTH_RETRY_MAX_S = 60
+
     def show_auth_error(self, message, mode="authorize"):
         self._auth_ok = False
         self._auth_retry_mode = mode
+        self._cancel_auth_retry()
+        message = message or "Sign in to control playback."
         if mode == "retry":
             self.auth_title.set_text("Spotify unavailable")
             self.auth_retry_label.set_text("Retry")
+            delay = getattr(self, "_auth_retry_delay", 0) or self.AUTH_RETRY_FIRST_S
+            self._auth_retry_delay = min(delay * 2, self.AUTH_RETRY_MAX_S)
+            message = "%s\nRetrying in %d s" % (message, delay)
+            self._auth_retry_timer = lv.timer_create(self._auto_auth_retry, delay * 1000, None)
+            self._auth_retry_timer.set_repeat_count(1)
         else:
             self.auth_title.set_text("Connect Spotify")
             self.auth_retry_label.set_text("Authorize")
-        self.auth_message.set_text(message or "Sign in to control playback.")
+        self.auth_message.set_text(message)
         self.auth_overlay.remove_flag(lv.obj.FLAG.HIDDEN)
         _raise_back_button(self.auth_retry_btn)
 
     def hide_auth_overlay(self):
         self._auth_ok = True
+        self._auth_retry_delay = 0
+        self._cancel_auth_retry()
         self.auth_overlay.add_flag(lv.obj.FLAG.HIDDEN)
 
+    def _cancel_auth_retry(self):
+        timer = getattr(self, "_auth_retry_timer", None)
+        self._auth_retry_timer = None
+        if timer is not None:
+            try:
+                timer.delete()
+            except Exception:  # noqa: BLE001 - a one-shot timer may be gone
+                pass
+
+    def _auto_auth_retry(self, _timer):
+        # A repeat-count-1 timer deletes itself after this call.
+        self._auth_retry_timer = None
+        if not self._auth_ok and self._auth_retry_mode == "retry":
+            self._on_auth_retry(None)
+
     def _on_auth_retry(self, _event):
+        self._cancel_auth_retry()
         if self._auth_retry_mode == "authorize":
             self.auth_message.set_text("Opening authorization...")
         else:
@@ -2861,7 +2914,7 @@ class SpotifyUI:
             return
         if self._volume_slider_busy:
             return
-        value = self.volume_slider.get_value()
+        value = VOLUME_LEVELS[self.volume_slider.get_value()]
         self._last_volume = int(value)
         device = self._local_device()
         if device is not None:
@@ -2890,7 +2943,7 @@ class SpotifyUI:
             self._show_volume_popup()
 
     def _show_volume_popup(self):
-        self.volume_slider.set_value(self._last_volume, ANIM_OFF)
+        self.volume_slider.set_value(_volume_index(self._last_volume), ANIM_OFF)
         self.volume_popup.remove_flag(lv.obj.FLAG.HIDDEN)
         self.volume_popup.align_to(self.volume_btn, lv.ALIGN.OUT_TOP_MID, 0, -6)
         _raise_back_button(self.volume_popup)
@@ -3303,7 +3356,7 @@ class SpotifyUI:
         if volume is not None and not self._volume_slider_busy and int(volume) != self._styled.get("volume"):
             self._styled["volume"] = int(volume)
             self._last_volume = int(volume)
-            self.volume_slider.set_value(self._last_volume, ANIM_OFF)
+            self.volume_slider.set_value(_volume_index(self._last_volume), ANIM_OFF)
 
     def _playback_flags(self, state):
         parts = []

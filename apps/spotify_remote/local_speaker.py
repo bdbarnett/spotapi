@@ -241,12 +241,14 @@ class LocalSpeaker:
         self._pcm.close()
 
 
-def start(name, bitrate=160, output=None):
+def start(name, bitrate=160, output=None, volume=None):
     """Start a Connect speaker named name; return a LocalSpeaker or None.
 
     output: None for this machine's own audio (the board's, through the audio
     pump where the firmware has it, or the host's), "usb" for a hosted USB
     sound card (an S3 without a codec driving a P4 running soundcard.py).
+    volume: the speaker's volume (0-100) before anything sets one; None keeps
+    earful's default (100).
     """
     try:
         import earful
@@ -274,6 +276,10 @@ def start(name, bitrate=160, output=None):
     pcm.open()
     _load_board_credentials(earful)
     device = earful.Device(name=name, bitrate=bitrate)
+    if volume is not None:
+        # Before start(): earful hands it to the session, which reports it
+        # to Spotify and scales the audio by it.
+        device.volume = volume
     device.start()
     device.attach(pcm)
     print("local speaker: %s started" % name)
