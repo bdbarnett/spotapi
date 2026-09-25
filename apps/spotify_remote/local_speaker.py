@@ -24,11 +24,12 @@ CRED_FILE = "earful.credentials"
 PUMP_RING_SECONDS = 4
 # How long to wait for a hosted USB sound card to enumerate.
 USB_FIND_MS = 15000
-# The USB host ring between this process and the bus (usbif#36). It has to
-# outlast the longest stall of the interpreter -- a redraw, a Web API call --
-# like the audio pump's ring on a board; 2 s of 44.1 kHz stereo is ~350 KB,
-# which usbif puts in PSRAM.
-USB_RING_MS = 2000
+# The USB host ring between earful and the bus (usbif#36). earful drains into
+# it from its own task (usbif#43), so it no longer has to outlast the
+# interpreter's stalls -- earful's ~5 s ring does that. What it holds plays
+# after a pause or a skip, so it is short: at 2 s, pause took 2 s to be heard
+# on the LCD-7 (2026-09-25).
+USB_RING_MS = 400
 
 
 def _load_board_credentials(earful):

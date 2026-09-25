@@ -28,8 +28,10 @@ if sys.implementation.name == "micropython" and sys.platform != "esp32":
     _thread = None
 
 # The thread's stack comes from internal RAM on ESP32, which is scarce on an
-# S3 with an RGB panel. Its high-water mark after TLS and JSON was ~7.8 KB.
-STACK_BYTES = 12 * 1024
+# S3 with an RGB panel -- but a TLS handshake runs here whenever a kept-alive
+# connection has to be reopened, and 12 KB overflowed into the heap on the
+# LCD-7 (tlsf_malloc panic, 2026-09-25).
+STACK_BYTES = 20 * 1024
 
 
 class Worker:
