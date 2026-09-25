@@ -156,8 +156,11 @@ def _config_path(name):
     """Prefer app-local config, falling back when Windows cannot follow its WSL symlink."""
     # Open rather than stat: over \\wsl.localhost a symlink stats fine but
     # cannot be opened.
+    # Then the launch directory: a board that installs the app under /lib (or
+    # overlays the frozen copy) keeps its config and tokens at /.
     app_path = _join_dir(_data_dir(), name)
-    for path in (app_path, _join_dir(_data_dir(), "../../" + name)):
+    cwd_path = _join_dir(os.getcwd().replace("\\", "/"), name)
+    for path in (app_path, _join_dir(_data_dir(), "../../" + name), cwd_path):
         try:
             open(path, "rb").close()
             return path
