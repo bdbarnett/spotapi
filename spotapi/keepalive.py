@@ -27,7 +27,11 @@ try:
 
     def _lock():
         return _thread.allocate_lock()
+
+    _MAIN_THREAD = _thread.get_ident()
 except ImportError:
+    _thread = None
+    _MAIN_THREAD = None
 
     class _NoLock:
         def acquire(self, *_a):
@@ -43,6 +47,75 @@ except ImportError:
 TIMEOUT_S = 20
 
 
+def _let_others_run():
+    """On a MicroPython worker thread, hand the GIL over for a moment.
+
+    The VM passes the GIL on only every 32 backward jumps, so a loop of a few
+    long C calls (json.loads of one item) would hold it throughout. Sleeping
+    releases it; the main (UI) thread never needs to.
+    """
+    if _thread is not None and _sleep_ms is not None and _thread.get_ident() != _MAIN_THREAD:
+        _sleep_ms(1)
+
+
+try:
+    from time import sleep_ms as _sleep_ms
+except ImportError:  # CPython: its GIL switches by time, no help needed
+    _sleep_ms = None
+
+# Bodies at least this large with an "items" array are parsed an item at a
+# time (see _loads_paged).
+SPLIT_BYTES = 32 * 1024
+# Largest single read: one read(n) decrypts all n bytes in C, GIL held.
+READ_CHUNK = 4096
+
+
+def _loads_paged(data):
+    """json.loads for a large paging object, one item at a time.
+
+    json.loads is one C call, and holds the GIL for all of it: 2.1 s for the
+    325 KB of /me/albums?limit=30 (every album carries its track list) on an
+    ESP32-S3, with the UI thread frozen that long behind the worker thread.
+    Parsed item by item, the interpreter can switch threads between items
+    (~70 ms each). The result is the same as json.loads(data); anything that
+    does not split cleanly is parsed whole.
+    """
+    i = data.find(b'"items"')
+    j = data.find(b"[", i) if i >= 0 else -1
+    close = data.rfind(b"]")
+    if j < 0 or close <= j or data[i + 7:j].strip() != b":":
+        return json.loads(data)
+    k = j + 1
+    while k < close and data[k] in b" \t\r\n":
+        k += 1
+    q = data.find(b'"', k)
+    if data[k:k + 1] != b"{" or q < 0 or data[k + 1:q].strip():
+        return json.loads(data)
+    # Each item starts with the first item's first key.
+    needle = data[q:data.find(b'"', q + 1) + 1]
+    starts = [k]
+    at = data.find(needle, q + len(needle))
+    while 0 <= at < close:
+        s = data.rfind(b"{", k, at)
+        if s > starts[-1] and not data[s + 1:at].strip():
+            starts.append(s)
+        at = data.find(needle, at + len(needle))
+    starts.append(close)
+    try:
+        items = []
+        for n in range(len(starts) - 1):
+            part = data[starts[n]:starts[n + 1]].rstrip()
+            if part.endswith(b","):
+                part = part[:-1]
+            items.append(json.loads(part))
+            _let_others_run()
+        page = json.loads(data[:j + 1] + data[close:])
+    except ValueError:
+        return json.loads(data)
+    page["items"] = items
+    return page
+
+
 class Response:
     def __init__(self, status_code, headers, content):
         self.status_code = status_code
@@ -54,6 +127,8 @@ class Response:
         return self.content.decode("utf-8")
 
     def json(self):
+        if len(self.content) >= SPLIT_BYTES:
+            return _loads_paged(self.content)
         return json.loads(self.content)
 
     def close(self):
@@ -130,11 +205,13 @@ class _Reader:
     def exact(self, n):
         parts = []
         while n > 0:
-            data = self.sock.read(n)
+            data = self.sock.read(n if n < READ_CHUNK else READ_CHUNK)
             if not data:
                 raise OSError("connection closed")
             parts.append(data)
             n -= len(data)
+            if n > 0:
+                _let_others_run()
         return b"".join(parts)
 
     def rest(self):
