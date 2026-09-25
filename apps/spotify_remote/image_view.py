@@ -1,6 +1,7 @@
-import gc
 
 import lvgl as lv
+
+from spotify_remote import artwork_cache
 
 _JPEG_DECODER = None  # "jpegio", "tjpgd", or None until jpeg_supported() finds one
 
@@ -34,8 +35,13 @@ def _jpeg_size(data):
 
 
 def _image_descriptor(path):
-    with open(path, "rb") as file:
-        data = file.read()
+    if path.startswith(artwork_cache.MEMORY_PREFIX):
+        data = artwork_cache.memory_bytes(path)
+        if data is None:
+            return None, None
+    else:
+        with open(path, "rb") as file:
+            data = file.read()
 
     if data.startswith(b"\xff\xd8") and jpeg_supported():
         width, height = _jpeg_size(data)
@@ -109,6 +115,7 @@ class CoverArtView:
         self.src = None
         self._data = None
         self._descriptor = None
+        self._shown_once = False
 
         self.container = lv.obj(parent)
         self.container.set_size(size, size)
@@ -129,8 +136,12 @@ class CoverArtView:
         self.container.align(align, x, y)
 
     def set_art(self, path):
-        if path == self.path and self._descriptor is not None:
+        # Same art (or the same missing art) as shown: nothing to do. This is
+        # called on every now-playing refresh, and redoing it cost ~300 ms a
+        # time on an ESP32-S3 (2026-09-25).
+        if path == self.path and (self._descriptor is not None or self._shown_once):
             return
+        self._shown_once = True
 
         self._release_art()
         self.path = path
@@ -161,10 +172,11 @@ class CoverArtView:
         self._show_placeholder("Cover unavailable")
 
     def _release_art(self):
+        # No gc.collect(): a full collection is ~105 ms on a 5 MB PSRAM heap,
+        # and the allocator collects when it needs the room.
         self.src = None
         self._data = None
         self._descriptor = None
-        gc.collect()
 
     def _show_placeholder(self, text):
         self._release_art()

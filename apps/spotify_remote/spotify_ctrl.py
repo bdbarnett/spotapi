@@ -201,6 +201,14 @@ def _ensure_scopes(auth, cache):
     )
 
 
+def _cache_memory_bytes(setting, board_default):
+    if setting is not None:
+        return setting
+    import sys
+
+    return board_default if sys.platform == "esp32" else 0
+
+
 class SpotifyController:
     def __init__(self):
         auth_config = load_config(CONFIG_PATH)
@@ -221,10 +229,12 @@ class SpotifyController:
         self.art_cache = artwork_cache.ArtworkCache(
             ART_CACHE_PATH,
             max_items=remote_config.ART_CACHE_MAX_ITEMS,
+            memory_bytes=_cache_memory_bytes(remote_config.ART_CACHE_MEMORY_BYTES, 1024 * 1024),
         )
         self.thumb_cache = artwork_cache.ArtworkCache(
             THUMB_CACHE_PATH,
             max_items=remote_config.THUMB_CACHE_MAX_ITEMS,
+            memory_bytes=_cache_memory_bytes(remote_config.THUMB_CACHE_MEMORY_BYTES, 512 * 1024),
         )
         self._me = None
         self._library_cache = {}

@@ -8,8 +8,19 @@ ART_CACHE_MAX_ITEMS = 24
 # under thumb_cache/. Set to 0 to disable the limit.
 THUMB_CACHE_MAX_ITEMS = 300
 
-# Saved library entries loaded per category tab.
+# Keep cover art and thumbnails in RAM instead of on disk, up to this many
+# bytes each (oldest dropped first). None: in RAM on ESP32 boards, where flash
+# writes stall the display and Wi-Fi and file lookups are slow; on disk
+# elsewhere. 0 forces disk.
+ART_CACHE_MEMORY_BYTES = None
+THUMB_CACHE_MEMORY_BYTES = None
+
+# Saved library entries loaded per category tab (and per "Load more").
 LIBRARY_LIST_LIMIT = 30
+
+# Saved albums per page: each comes with its whole track list (~11 KB), so a
+# 30-album page was 325 KB -- 15 s over a weak link on an ESP32-S3.
+LIBRARY_ALBUMS_LIMIT = 10
 
 # Tracks/albums shown in album and playlist browse views.
 BROWSE_LIST_LIMIT = 30

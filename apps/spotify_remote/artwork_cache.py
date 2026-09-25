@@ -2,6 +2,16 @@ import os
 
 from spotapi.transport import get_bytes
 
+# In-memory caches publish "mem:<hash>" in place of a file path; image_view
+# resolves those here. Shared across caches: the hash is of the URL.
+MEMORY_PREFIX = "mem:"
+_memory = {}
+
+
+def memory_bytes(path):
+    """The bytes behind a "mem:" path, or None once evicted."""
+    return _memory.get(path[len(MEMORY_PREFIX):])
+
 
 def _exists(path):
     try:
@@ -47,10 +57,22 @@ def _extension_from_bytes(data, fallback):
 
 
 class ArtworkCache:
-    def __init__(self, directory, max_items=24):
+    """Downloaded images, by URL: files in a directory, or held in memory.
+
+    ``memory_bytes`` > 0 keeps them in RAM instead, oldest out first once the
+    total passes that many bytes. On an ESP32-S3 with an RGB panel that is the
+    right place: a flash write stalls the cache that PSRAM, the panel refill
+    and Wi-Fi all run through, and every file lookup cost ~30 ms of flash
+    reads on the UI thread, several per thumbnail (2026-09-25).
+    """
+
+    def __init__(self, directory, max_items=24, memory_bytes=0):
         self.directory = directory
         self.max_items = max_items
-        if self.max_items:
+        self.memory_budget = memory_bytes
+        self._order = []  # memory mode: hashes, oldest first
+        self._size = 0
+        if self.max_items and not self.memory_budget:
             self._trim_cache()
 
     def path_for_url(self, url):
@@ -59,6 +81,8 @@ class ArtworkCache:
         path = self.cached_path(url)
         if path:
             return path
+        if self.memory_budget:
+            return self._fetch_to_memory(url, _simple_hash(url))
         return self._download(url, _simple_hash(url), _extension_from_url(url))
 
     def cached_path(self, url):
@@ -66,11 +90,30 @@ class ArtworkCache:
         if not url:
             return None
         base = _simple_hash(url)
+        if self.memory_budget:
+            if base in _memory:
+                if base in self._order:
+                    self._order.remove(base)
+                    self._order.append(base)
+                return MEMORY_PREFIX + base
+            return None
         for ext in ("jpg", "png", "bmp", _extension_from_url(url)):
             path = self._cache_path(base, ext)
             if _exists(path):
                 return path
         return None
+
+    def _fetch_to_memory(self, url, base):
+        data = get_bytes(url, base_url="")
+        _memory[base] = data
+        self._order.append(base)
+        self._size += len(data)
+        while self._size > self.memory_budget and len(self._order) > 1:
+            old = self._order.pop(0)
+            gone = _memory.pop(old, None)
+            if gone is not None:
+                self._size -= len(gone)
+        return MEMORY_PREFIX + base
 
     def _download(self, url, base, fallback_ext):
         _mkdir(self.directory)
