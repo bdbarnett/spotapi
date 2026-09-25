@@ -34,6 +34,40 @@ def _jpeg_size(data):
     return 0, 0
 
 
+_decoder = None
+
+
+def _decode_rgb565(data):
+    """(descriptor, pixels) for a JPEG decoded once to RGB565, or None.
+
+    LVGL's image cache is off in these builds (LV_CACHE_DEF_SIZE 0), so an
+    lv.image showing a JPEG decodes it again on every redraw: ~124 ms for a
+    300x300 cover on an ESP32-S3, more than once per frame, which tripled a
+    full redraw of the Now screen (117 -> ~390 ms). Decoded here once, LVGL
+    only copies pixels.
+    """
+    global _decoder
+    try:
+        import jpegio
+
+        if _decoder is None:
+            _decoder = jpegio.JpegDecoder()
+        width, height = _decoder.open(data)
+        pixels = bytearray(width * height * 2)
+        _decoder.decode(pixels)
+    except Exception:  # noqa: BLE001 - fall back to LVGL's own decoding
+        return None
+    descriptor = lv.image_dsc_t()
+    descriptor.header.magic = lv.IMAGE_HEADER_MAGIC
+    descriptor.header.cf = lv.COLOR_FORMAT.RGB565
+    descriptor.header.w = width
+    descriptor.header.h = height
+    descriptor.header.stride = width * 2
+    descriptor.data_size = len(pixels)
+    descriptor.data = pixels
+    return descriptor, pixels
+
+
 def _image_descriptor(path):
     if path.startswith(artwork_cache.MEMORY_PREFIX):
         data = artwork_cache.memory_bytes(path)
@@ -44,6 +78,10 @@ def _image_descriptor(path):
             data = file.read()
 
     if data.startswith(b"\xff\xd8") and jpeg_supported():
+        if _JPEG_DECODER == "jpegio":
+            decoded = _decode_rgb565(data)
+            if decoded is not None:
+                return decoded
         width, height = _jpeg_size(data)
     else:
         width = 0
