@@ -99,10 +99,23 @@ if sys.platform == "esp32":
     except (ImportError, AttributeError, OSError, ValueError):
         pass
 
-controller = SpotifyController()
-ui = SpotifyUI(controller, on_poll=lambda: poll(ui, controller))
+# Build the whole UI before LVGL draws any of it. display_driver's tick
+# arrives through micropython.schedule, between this module's own bytecodes,
+# so while the screens were being built LVGL drew them part by part: the Now
+# screen appeared a control at a time and the cover area flashed (LCD-7,
+# 2026-09-25). Paused here, the first frame after enable() is the whole UI.
+if _loop is not None:
+    _loop.disable()
+try:
+    controller = SpotifyController()
+    ui = SpotifyUI(controller, on_poll=lambda: poll(ui, controller))
+finally:
+    if _loop is not None:
+        _loop.enable()
 
 # Optional: this process is also a Connect speaker (earful), listed in Devices.
+# The remote treats it like any other device -- through the Web API, never
+# directly -- so it behaves the same with or without one.
 _speaker_name = remote_config.LOCAL_SPEAKER
 if len(getattr(sys, "argv", ())) > 1 and sys.argv[1]:
     _speaker_name = sys.argv[1]
@@ -115,8 +128,6 @@ speaker = (
     if _speaker_name
     else None
 )
-if speaker is not None:
-    ui.attach_local_speaker(speaker)
 
 try:
     me = controller.me()
@@ -147,24 +158,5 @@ def _poll_timer(_timer):
 
 lv.timer_create(_poll_timer, 5000, None)
 
-# The local speaker (earful) stamps what it tells Spotify with the wall
-# clock; a clock hours off made the phone show it stopped at 0:00 while it
-# played (LCD-7, 2026-09-25: a tool had set the RTC to local time). Boards
-# sync once at Wi-Fi connect; sync again every hour, on the worker.
-NTP_RESYNC_MS = 60 * 60 * 1000
-
-
-def _ntp_sync():
-    import ntptime
-
-    ntptime.settime()
-
-
-def _ntp_timer(_timer):
-    ui.worker.submit(_ntp_sync, key="ntp")
-
-
-if sys.platform == "esp32" and speaker is not None:
-    lv.timer_create(_ntp_timer, NTP_RESYNC_MS, None)
 if ui._auth_ok:
     poll(ui, controller)

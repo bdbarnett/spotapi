@@ -443,8 +443,8 @@ class SpotifyUI:
         self._thumb_timer = None
         self._thumb_gen = {}
         self._list_tails = {}
-        self._local = None
         self._progress_base = None  # (progress_ms, ticks_ms) of the last state
+        lv.timer_create(self._progress_tick, 500, None)
         # What each Now-screen control was last styled as. Restyling one costs
         # ~30 ms on an ESP32-S3 (LVGL refreshes the style and relayouts), and
         # every refresh restyled seven of them whether or not anything changed.
@@ -2459,25 +2459,6 @@ class SpotifyUI:
         artist_id = artist["id"]
         self._net(lambda: self.controller.toggle_follow_artist(artist_id, bool(followed)))
 
-    # ---- this process's own speaker ---------------------------------------
-    # When the local earful speaker is the active device, the controls go to
-    # it directly and the screen reads its state: no Web API round trip, so a
-    # tap acts at once. The Web API still fills in what earful does not know
-    # (ids, saved flags), in the background.
-
-    def attach_local_speaker(self, speaker):
-        self._local = speaker
-        lv.timer_create(self._local_tick, 500, None)
-
-    def _local_device(self):
-        local = self._local
-        if local is None:
-            return None
-        device = local.device
-        if device.playing or self._now_state.get("device") == local.name:
-            return device
-        return None
-
     def _style_play(self, playing):
         def apply():
             _style_transport_primary(self.play_btn, self.play_btn.get_height(), playing=playing)
@@ -2516,55 +2497,20 @@ class SpotifyUI:
         duration = self._now_state.get("duration_ms") or 0
         return min(progress, duration) if duration else progress
 
-    def _local_tick(self, _timer):
-        device = self._local_device()
-        if device is None:
-            # Another device: move the bar between polls instead of jumping.
-            if self._now_state.get("playing") and self._progress_base is not None:
-                self._render_progress(self._shown_progress(), self._now_state.get("duration_ms") or 0)
-            return
-        uri = device.track
-        if uri and uri != self._now_state.get("item_uri"):
-            self._now_state["item_uri"] = uri
-            self.track_label.set_text(device.title or "")
-            self.artist_label.set_text(device.artist or "")
-            self.album_label.set_text(device.album or "")
-            self.on_poll()
-        duration = device.duration or 0
-        position = device.position or 0
-        self._now_state["duration_ms"] = duration
-        self._progress_base = (position, time.ticks_ms())
-        self._render_progress(position, duration)
-        playing = bool(device.playing)
-        if playing != bool(self._now_state.get("playing")):
-            self._show_playing(playing)
+    def _progress_tick(self, _timer):
+        # Move the bar between polls instead of jumping every 5 s.
+        if self._now_state.get("playing") and self._progress_base is not None:
+            self._render_progress(self._shown_progress(), self._now_state.get("duration_ms") or 0)
 
     def _on_prev(self, _event):
-        device = self._local_device()
-        if device is not None:
-            device.prev()
-            return
         self._run_transport(self.controller.previous_track)
 
     def _on_play_pause(self, _event):
-        device = self._local_device()
-        if device is not None:
-            playing = bool(device.playing)
-            if playing:
-                device.pause()
-            else:
-                device.play()
-            self._show_playing(not playing)
-            return
         play = not self._now_state.get("playing")
         self._show_playing(play)  # at once; the next refresh corrects it
         self._run_transport(lambda: self.controller.set_playing(play))
 
     def _on_next(self, _event):
-        device = self._local_device()
-        if device is not None:
-            device.next()
-            return
         self._run_transport(self.controller.next_track)
 
     def _on_shuffle(self, _event):
@@ -2902,10 +2848,6 @@ class SpotifyUI:
     def _seek_to(self, position_ms):
         self._progress_base = (position_ms, time.ticks_ms())
         self._render_progress(position_ms, self._now_state.get("duration_ms") or 0)
-        device = self._local_device()
-        if device is not None:
-            device.seek(int(position_ms))
-            return
         # Hold the slider where it was dropped until a refresh catches up.
         self._seek_hold_until = time.ticks_add(time.ticks_ms(), 3500)
         self._net(
@@ -2921,10 +2863,6 @@ class SpotifyUI:
             return
         value = VOLUME_LEVELS[self.volume_slider.get_value()]
         self._last_volume = int(value)
-        device = self._local_device()
-        if device is not None:
-            device.volume = int(value)
-            return
         self._volume_slider_busy = True
         try:
             self._run_transport(
@@ -3286,12 +3224,6 @@ class SpotifyUI:
             self.album_save_btn.add_flag(lv.obj.FLAG.HIDDEN)
 
     def update_now_playing(self, state):
-        device = self._local_device()
-        if device is not None and state.get("device") == self._local.name:
-            # The Web API lags what the speaker itself knows.
-            state["playing"] = bool(device.playing)
-            state["progress_ms"] = device.position or state.get("progress_ms") or 0
-            state["duration_ms"] = device.duration or state.get("duration_ms") or 0
         self._now_state = state
         self._progress_base = (state.get("progress_ms") or 0, time.ticks_ms())
         if state.get("item_id") != getattr(self, "_last_item_id", None):

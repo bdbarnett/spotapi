@@ -30,6 +30,11 @@ USB_FIND_MS = 15000
 # after a pause or a skip, so it is short: at 2 s, pause took 2 s to be heard
 # on the LCD-7 (2026-09-25).
 USB_RING_MS = 400
+# earful stamps what it tells Spotify with the wall clock; hours off, the
+# phone showed a playing speaker stopped at 0:00 (LCD-7, 2026-09-25: a serial
+# tool had set the RTC to local time). A board syncs NTP at Wi-Fi connect;
+# the speaker syncs again this often.
+NTP_RESYNC_MS = 60 * 60 * 1000
 
 
 def _load_board_credentials(earful):
@@ -210,6 +215,18 @@ class LocalSpeaker:
         self._saved = earful.has_credentials()
         self._ticks = 0
         self._timer = lv.timer_create(self._pump, PUMP_MS, None)
+        self._ntp_timer = None
+        if sys.platform == "esp32":
+            self._ntp_timer = lv.timer_create(self._ntp, NTP_RESYNC_MS, None)
+
+    def _ntp(self, _timer):
+        try:
+            import ntptime
+
+            ntptime.timeout = 1  # one short UDP exchange on this thread
+            ntptime.settime()
+        except Exception as error:  # noqa: BLE001 - try again next hour
+            print("local speaker: ntp %r" % (error,))
 
     def _pump(self, _timer):
         if self._service is not None:
@@ -237,6 +254,8 @@ class LocalSpeaker:
 
     def stop(self):
         self._timer.delete()
+        if self._ntp_timer is not None:
+            self._ntp_timer.delete()
         self.device.stop()
         self._pcm.close()
 
