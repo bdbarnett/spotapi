@@ -34,6 +34,15 @@ env_set("PYDEVICES_SCALE", "1")
 import display_driver  # NOQA
 import lvgl as lv  # NOQA
 
+# After a slow LVGL pass display_driver keeps the tick back, to leave the
+# thread to application code running outside LVGL. All of this app runs in
+# LVGL timers, so that hold only idles the thread and lengthens each stall
+# (lvgl-bindings#19); older display_drivers have no such knob.
+_loop = getattr(display_driver, "event_loop", None)
+_loop = _loop.current_instance() if _loop is not None else None
+if _loop is not None and hasattr(_loop, "max_yield_ms"):
+    _loop.max_yield_ms = 0
+
 # ---------------------------------------------------------------------------
 # Display and input drivers (you provide these on hardware).
 #

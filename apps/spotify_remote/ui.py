@@ -278,8 +278,11 @@ def _style_link_button(btn, label):
 
 
 # Progressive list building: rows built at once, then per 15 ms LVGL tick.
-ROWS_FIRST = 7
-ROWS_PER_TICK = 3
+# Each row is ~30 ms to build and ~15 ms to lay out and draw on an ESP32-S3,
+# so these bound how long one tick holds the screen (~200 ms, then ~100 ms).
+# Four rows fill most of the LCD-7's list; the rest arrive within a second.
+ROWS_FIRST = 4
+ROWS_PER_TICK = 2
 
 LIBRARY_TAB_TITLES = {
     "tracks": "Songs",
@@ -1649,13 +1652,20 @@ class SpotifyUI:
         state = {"i": 0, "y": start_y, "timer": None}
 
         def build(count):
+            # Rows are built hidden and shown once laid out: LVGL skips
+            # invalidating hidden objects, so each row repaints once instead
+            # of once per child (layout ~12 -> ~8 ms a row on the LCD-7).
+            first = scroll.get_child_count()
             while state["i"] < len(rows) and count > 0:
                 state["y"] = self._build_entry_row(
                     scroll, rows[state["i"]], state["y"], on_primary, actions,
-                    chip_w, thumbs, load_more, highlight_now,
+                    chip_w, thumbs, load_more, highlight_now, hidden=True,
                 )
                 state["i"] += 1
                 count -= 1
+            scroll.update_layout()
+            for index in range(first, scroll.get_child_count()):
+                scroll.get_child(index).remove_flag(lv.obj.FLAG.HIDDEN)
             if state["i"] >= len(rows):
                 more = None
                 if load_more:
@@ -1663,8 +1673,9 @@ class SpotifyUI:
                     more.set_size(self._list_w - 8, ROW_HEIGHT)
                     more.align(lv.ALIGN.TOP_MID, 0, state["y"])
                     _style_link_button(more, None)
-                    lv.label(more).set_text("Load more")
-                    lv.label(more).center()
+                    more_label = lv.label(more)
+                    more_label.set_text("Load more")
+                    more_label.center()
                     more.add_event_cb(lambda event: load_more(), lv.EVENT.CLICKED, None)
                 self._list_tails[id(scroll)] = {"y": state["y"], "more": more}
                 return True
@@ -1687,9 +1698,11 @@ class SpotifyUI:
         return compact
 
     def _build_entry_row(
-        self, scroll, entry, y, on_primary, actions, chip_w, thumbs, load_more, highlight_now
+        self, scroll, entry, y, on_primary, actions, chip_w, thumbs, load_more, highlight_now,
+        hidden=False,
     ):
-        """One list row at y; returns the y of the next."""
+        """One list row at y; returns the y of the next. hidden: the row starts
+        hidden, for the caller to show once it is laid out."""
         is_now = entry.get("now_playing") or (
             highlight_now and self._now_playing_match(entry)
         )
@@ -1710,6 +1723,8 @@ class SpotifyUI:
         row_h = ROW_HEIGHT
 
         row = lv.obj(scroll)
+        if hidden:
+            row.add_flag(lv.obj.FLAG.HIDDEN)
         row.set_size(self._list_w - 8, row_h)
         row.align(lv.ALIGN.TOP_MID, 0, y)
         row.add_style(_style("row"), lv.PART.MAIN)

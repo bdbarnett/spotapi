@@ -64,8 +64,9 @@ except ImportError:  # CPython: its GIL switches by time, no help needed
     _sleep_ms = None
 
 # Bodies at least this large with an "items" array are parsed an item at a
-# time (see _loads_paged).
-SPLIT_BYTES = 32 * 1024
+# time (see _loads_paged). json.loads runs ~11 ms per KB on an ESP32-S3, GIL
+# held: a 24 KB playlist page was a 270 ms UI stall at a 32 KB threshold.
+SPLIT_BYTES = 8 * 1024
 # Largest single read: one read(n) decrypts all n bytes in C, GIL held.
 READ_CHUNK = 4096
 
