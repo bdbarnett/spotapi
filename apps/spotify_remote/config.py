@@ -41,9 +41,10 @@ SEARCH_RESULT_LIMIT = 10
 MAX_ROW_ACTIONS = 4
 
 # One "..." chip per list row, opening a sheet with all of its actions, in
-# place of a chip per action. None: compact on ESP32 boards, where each chip
-# costs ~12 ms to build and a 30-row list took ~1.8 s; chips elsewhere.
-COMPACT_ROW_ACTIONS = None
+# place of a chip per action. Off by default: every row keeps its chips. On
+# the LCD-7 a row costs ~44 ms with the lcd7 cache settings and LVGL's pooled
+# allocator (66 ms before). None: compact on ESP32 boards only.
+COMPACT_ROW_ACTIONS = False
 
 # Name for a local Spotify Connect speaker in this process (needs the earful
 # usermod), e.g. "earful-win". None leaves it off. The first command-line

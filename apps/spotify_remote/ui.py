@@ -106,10 +106,90 @@ def _label_case(value):
     return value[0].upper() + value[1:]
 
 
+# Shared LVGL styles, built once and added to widgets, instead of a local
+# style property per widget per call. Each set_style_* call made LVGL refresh
+# the widget's style (~0.3 ms on an ESP32-S3); a list row with three action
+# chips made ~30 of them (~20 ms). A shared style is one add_style().
+_STYLES = {}
+
+
+def _style(name):
+    st = _STYLES.get(name)
+    if st is None:
+        st = lv.style_t()
+        st.init()
+        _STYLE_BUILDERS[name](st)
+        _STYLES[name] = st
+    return st
+
+
+def _build_base(st):
+    st.set_shadow_width(0)
+    st.set_pad_all(0)
+    st.set_border_width(0)
+
+
+def _build_chip(st):
+    st.set_radius(10)
+
+
+def _build_chip_off(st):
+    st.set_bg_color(_hex(SURFACE))
+    st.set_border_width(1)
+    st.set_border_color(_hex(BORDER))
+
+
+def _build_chip_on(st):
+    st.set_bg_color(_hex(ACCENT))
+    st.set_border_width(0)
+
+
+def _build_bg(color):
+    return lambda st: st.set_bg_color(_hex(color))
+
+
+def _build_text(color):
+    return lambda st: st.set_text_color(_hex(color))
+
+
+def _build_link(st):
+    st.set_radius(6)
+    st.set_bg_opa(lv.OPA.TRANSP)
+
+
+def _build_row(st):
+    st.set_bg_opa(lv.OPA.TRANSP)
+    st.set_border_width(0)
+    st.set_pad_all(0)
+
+
+_STYLE_BUILDERS = {
+    "base": _build_base,
+    "chip": _build_chip,
+    "chip_off": _build_chip_off,
+    "chip_on": _build_chip_on,
+    "chip_off_pressed": _build_bg(SURFACE_PRESSED),
+    "chip_on_pressed": _build_bg(ACCENT_PRESSED),
+    "text": _build_text(TEXT),
+    "text_muted": _build_text(MUTED),
+    "text_on_accent": _build_text(BG),
+    "link": _build_link,
+    "link_pressed": _build_bg(SURFACE_PRESSED),
+    "row": _build_row,
+}
+
+_PRESSED = None
+
+
+def _pressed():
+    global _PRESSED
+    if _PRESSED is None:
+        _PRESSED = lv.PART.MAIN | lv.STATE.PRESSED
+    return _PRESSED
+
+
 def _style_base(obj):
-    obj.set_style_shadow_width(0, lv.PART.MAIN)
-    obj.set_style_pad_all(0, lv.PART.MAIN)
-    obj.set_style_border_width(0, lv.PART.MAIN)
+    obj.add_style(_style("base"), lv.PART.MAIN)
 
 
 def _style_slim_slider(slider):
@@ -139,8 +219,38 @@ def _style_transport_primary(btn, size, playing=False):
     btn.set_style_bg_color(_hex(pressed), lv.PART.MAIN | lv.STATE.PRESSED)
 
 
-def _style_chip(btn, label, active=False, muted=False):
-    _style_base(btn)
+_CHIP_STYLES = ("base", "chip", "chip_on", "chip_off")
+_CHIP_PRESSED_STYLES = ("chip_on_pressed", "chip_off_pressed")
+_TEXT_STYLES = ("text", "text_muted", "text_on_accent")
+
+
+def _style_chip(btn, label, active=False, muted=False, fresh=False):
+    """Style a chip and its label. fresh: the widget has no chip styles yet
+    (just created), so there is nothing to remove first."""
+    pressed = _pressed()
+    if not fresh:
+        for name in _CHIP_STYLES:
+            btn.remove_style(_style(name), lv.PART.MAIN)
+        for name in _CHIP_PRESSED_STYLES:
+            btn.remove_style(_style(name), pressed)
+        for name in _TEXT_STYLES:
+            label.remove_style(_style(name), lv.PART.MAIN)
+    btn.add_style(_style("base"), lv.PART.MAIN)
+    btn.add_style(_style("chip"), lv.PART.MAIN)
+    if active:
+        btn.add_style(_style("chip_on"), lv.PART.MAIN)
+        btn.add_style(_style("chip_on_pressed"), pressed)
+        label.add_style(_style("text_on_accent"), lv.PART.MAIN)
+    else:
+        btn.add_style(_style("chip_off"), lv.PART.MAIN)
+        btn.add_style(_style("chip_off_pressed"), pressed)
+        label.add_style(_style("text_muted" if muted else "text"), lv.PART.MAIN)
+
+
+def _style_chip_local(btn, label, active=False):
+    """The chip look as local style properties, for a widget that is also
+    styled with local properties elsewhere (the volume button toggles between
+    the transport look and this); local properties beat shared styles."""
     btn.set_style_radius(10, lv.PART.MAIN)
     if active:
         btn.set_style_border_width(0, lv.PART.MAIN)
@@ -152,21 +262,19 @@ def _style_chip(btn, label, active=False, muted=False):
         btn.set_style_bg_color(_hex(SURFACE_PRESSED), lv.PART.MAIN | lv.STATE.PRESSED)
         btn.set_style_border_width(1, lv.PART.MAIN)
         btn.set_style_border_color(_hex(BORDER), lv.PART.MAIN)
-        text_color = MUTED if muted else TEXT
-        label.set_style_text_color(_hex(text_color), lv.PART.MAIN)
+        label.set_style_text_color(_hex(TEXT), lv.PART.MAIN)
 
 
-def _style_nav_button(btn, label, active=False):
-    _style_chip(btn, label, active=active, muted=not active)
+def _style_nav_button(btn, label, active=False, fresh=False):
+    _style_chip(btn, label, active=active, muted=not active, fresh=fresh)
 
 
 def _style_link_button(btn, label):
-    _style_base(btn)
-    btn.set_style_radius(6, lv.PART.MAIN)
-    btn.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
-    btn.set_style_bg_color(_hex(SURFACE_PRESSED), lv.PART.MAIN | lv.STATE.PRESSED)
+    btn.add_style(_style("base"), lv.PART.MAIN)
+    btn.add_style(_style("link"), lv.PART.MAIN)
+    btn.add_style(_style("link_pressed"), _pressed())
     if label is not None:
-        label.set_style_text_color(_hex(TEXT), lv.PART.MAIN)
+        label.add_style(_style("text"), lv.PART.MAIN)
 
 
 # Progressive list building: rows built at once, then per 15 ms LVGL tick.
@@ -918,7 +1026,7 @@ class SpotifyUI:
         label = lv.label(btn)
         label.set_text(text)
         label.center()
-        _style_chip(btn, label, active=False)
+        _style_chip(btn, label, active=False, fresh=True)
         btn.add_event_cb(callback, lv.EVENT.CLICKED, None)
         btn.add_flag(lv.obj.FLAG.HIDDEN)
         return btn, label
@@ -966,7 +1074,7 @@ class SpotifyUI:
         label = lv.label(btn)
         label.set_text(text)
         label.center()
-        _style_chip(btn, label, active=False)
+        _style_chip(btn, label, active=False, fresh=True)
         return btn, label
 
     def _show_panel(self, name):
@@ -1110,7 +1218,7 @@ class SpotifyUI:
         self.auth_retry_btn.add_event_cb(self._on_auth_retry, lv.EVENT.CLICKED, None)
         self.auth_retry_label = lv.label(self.auth_retry_btn)
         self.auth_retry_label.set_text("Authorize")
-        _style_chip(self.auth_retry_btn, self.auth_retry_label, active=True)
+        _style_chip(self.auth_retry_btn, self.auth_retry_label, active=True, fresh=True)
         self._auth_retry_mode = "authorize"
 
     def show_auth_error(self, message, mode="authorize"):
@@ -1604,9 +1712,7 @@ class SpotifyUI:
         row = lv.obj(scroll)
         row.set_size(self._list_w - 8, row_h)
         row.align(lv.ALIGN.TOP_MID, 0, y)
-        row.set_style_bg_opa(lv.OPA.TRANSP, 0)
-        row.set_style_border_width(0, 0)
-        row.set_style_pad_all(0, 0)
+        row.add_style(_style("row"), lv.PART.MAIN)
         row.remove_flag(lv.obj.FLAG.SCROLLABLE)
 
         left_pad = 8
@@ -1697,7 +1803,7 @@ class SpotifyUI:
         label = lv.label(btn)
         label.set_text(text)
         label.center()
-        _style_chip(btn, label, active=False)
+        _style_chip(btn, label, active=False, fresh=True)
         btn.add_event_cb(callback, lv.EVENT.CLICKED, None)
         return btn, label
 
@@ -2770,7 +2876,7 @@ class SpotifyUI:
         _raise_back_button(self.volume_popup)
         _raise_back_button(self.volume_btn)
         self._volume_popup_visible = True
-        _style_chip(self.volume_btn, self.volume_btn_label, active=True)
+        _style_chip_local(self.volume_btn, self.volume_btn_label, active=True)
         self._reset_volume_hide_timer()
 
     def _hide_volume_popup(self):
