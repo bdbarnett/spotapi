@@ -18,10 +18,26 @@ except ImportError:
 
 
 class TransportError(Exception):
-    def __init__(self, message, status=None, data=None):
+    def __init__(self, message, status=None, data=None, retry_after=None):
         self.args = (message,)
         self.status = status
         self.data = data
+        # Seconds from a Retry-After header (429, 503), or None. Spotify's can
+        # be hours: 38108 s once an app had gone over its limit.
+        self.retry_after = retry_after
+
+
+def _retry_after(response):
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        return None
+    try:
+        value = headers.get("retry-after")
+        if value is None:
+            value = headers.get("Retry-After")
+        return int(value) if value is not None else None
+    except (AttributeError, TypeError, ValueError):
+        return None
 
 
 def _find_requests():
@@ -178,13 +194,13 @@ def response_json(response):
         except ValueError:
             if status is not None and (status < 200 or status >= 300):
                 data = _response_error_data(response)
-                raise TransportError("HTTP status {}".format(status), status, data)
+                raise TransportError("HTTP status {}".format(status), status, data, _retry_after(response))
             raise
     finally:
         close_response(response)
 
     if status is not None and (status < 200 or status >= 300):
-        raise TransportError("HTTP status {}".format(status), status, data)
+        raise TransportError("HTTP status {}".format(status), status, data, _retry_after(response))
 
     return data
 
@@ -197,7 +213,7 @@ def response_bytes(response):
         close_response(response)
 
     if status is not None and (status < 200 or status >= 300):
-        raise TransportError("HTTP status {}".format(status), status, data)
+        raise TransportError("HTTP status {}".format(status), status, data, _retry_after(response))
 
     return data
 

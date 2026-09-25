@@ -113,6 +113,13 @@ def friendly_error(error):
         if status == 404:
             return "Not found"
         if status == 429:
+            wait = getattr(error, "retry_after", None)
+            if wait and wait >= 120:
+                if wait >= 5400:
+                    when = "about %d hours" % ((wait + 1800) // 3600)
+                else:
+                    when = "about %d minutes" % ((wait + 30) // 60)
+                return "Spotify is limiting this app - back in %s" % when
             return "Too many requests - wait a moment"
         if status and status >= 500:
             return "Spotify service error ({})".format(status)

@@ -127,7 +127,7 @@ except Exception as error:
     if needs_authorization(error):
         ui.show_auth_error(message, mode="authorize")
     elif is_transient_error(error):
-        ui.show_auth_error(message, mode="retry")
+        ui.show_auth_error(message, mode="retry", retry_after=getattr(error, "retry_after", None))
     else:
         ui.set_status(message, kind="error")
 
@@ -146,5 +146,25 @@ def _poll_timer(_timer):
 
 
 lv.timer_create(_poll_timer, 5000, None)
+
+# The local speaker (earful) stamps what it tells Spotify with the wall
+# clock; a clock hours off made the phone show it stopped at 0:00 while it
+# played (LCD-7, 2026-09-25: a tool had set the RTC to local time). Boards
+# sync once at Wi-Fi connect; sync again every hour, on the worker.
+NTP_RESYNC_MS = 60 * 60 * 1000
+
+
+def _ntp_sync():
+    import ntptime
+
+    ntptime.settime()
+
+
+def _ntp_timer(_timer):
+    ui.worker.submit(_ntp_sync, key="ntp")
+
+
+if sys.platform == "esp32" and speaker is not None:
+    lv.timer_create(_ntp_timer, NTP_RESYNC_MS, None)
 if ui._auth_ok:
     poll(ui, controller)

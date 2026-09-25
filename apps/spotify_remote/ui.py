@@ -1257,7 +1257,7 @@ class SpotifyUI:
     AUTH_RETRY_FIRST_S = 5
     AUTH_RETRY_MAX_S = 60
 
-    def show_auth_error(self, message, mode="authorize"):
+    def show_auth_error(self, message, mode="authorize", retry_after=None):
         self._auth_ok = False
         self._auth_retry_mode = mode
         self._cancel_auth_retry()
@@ -1267,7 +1267,12 @@ class SpotifyUI:
             self.auth_retry_label.set_text("Retry")
             delay = getattr(self, "_auth_retry_delay", 0) or self.AUTH_RETRY_FIRST_S
             self._auth_retry_delay = min(delay * 2, self.AUTH_RETRY_MAX_S)
-            message = "%s\nRetrying in %d s" % (message, delay)
+            if retry_after and retry_after > delay:
+                # Spotify said when (Retry-After): asking sooner only
+                # repeats the refusal. Check at least hourly regardless.
+                delay = min(retry_after + 1, 3600)
+            if delay < 120:
+                message = "%s\nRetrying in %d s" % (message, delay)
             self._auth_retry_timer = lv.timer_create(self._auto_auth_retry, delay * 1000, None)
             self._auth_retry_timer.set_repeat_count(1)
         else:
@@ -1319,10 +1324,10 @@ class SpotifyUI:
             message = friendly_error(error)
             if needs_authorization(error):
                 self.show_auth_error(message, mode="authorize")
-            elif is_transient_error(error):
-                self.show_auth_error(message, mode="retry")
             else:
-                self.show_auth_error(message, mode="retry")
+                self.show_auth_error(
+                    message, mode="retry", retry_after=getattr(error, "retry_after", None)
+                )
 
     def _build_action_sheet(self, parent, width, height):
         self.action_sheet = lv.obj(parent)
