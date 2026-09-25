@@ -110,11 +110,35 @@ def _loads_paged(data):
                 part = part[:-1]
             items.append(json.loads(part))
             _let_others_run()
-        page = json.loads(data[:j + 1] + data[close:])
+        # The array may sit at any depth ({"artists": {"items": [...]}}):
+        # parse the rest around a marker, then put the items where it is.
+        page = json.loads(data[:j + 1] + _MARK + data[close:])
     except ValueError:
         return json.loads(data)
-    page["items"] = items
+    if not _put_items(page, items):
+        return json.loads(data)
     return page
+
+
+_MARK_TEXT = "__spotapi_items_marker__"
+_MARK = b'"' + _MARK_TEXT.encode() + b'"'
+
+
+def _put_items(node, items):
+    """Replace the one-element marker list inside node with items."""
+    if isinstance(node, dict):
+        children = node.values()
+    elif isinstance(node, list):
+        if len(node) == 1 and node[0] == _MARK_TEXT:
+            node[0:1] = items
+            return True
+        children = node
+    else:
+        return False
+    for child in children:
+        if isinstance(child, (dict, list)) and _put_items(child, items):
+            return True
+    return False
 
 
 class Response:
