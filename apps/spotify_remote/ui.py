@@ -1,4 +1,3 @@
-import gc
 import time
 
 import lvgl as lv
@@ -17,6 +16,7 @@ except AttributeError:
 
 from spotify_remote import config as remote_config
 from spotify_remote import image_view
+from spotify_remote.worker import Worker
 from spotify_remote.spotify_ctrl import (
     friendly_error,
     is_no_active_device_error,
@@ -169,6 +169,10 @@ def _style_link_button(btn, label):
         label.set_style_text_color(_hex(TEXT), lv.PART.MAIN)
 
 
+# Progressive list building: rows built at once, then per 15 ms LVGL tick.
+ROWS_FIRST = 7
+ROWS_PER_TICK = 3
+
 LIBRARY_TAB_TITLES = {
     "tracks": "Songs",
     "artists": "Artists",
@@ -256,9 +260,11 @@ def _volume_btn_symbol():
 
 
 class SpotifyUI:
-    def __init__(self, controller, on_poll):
+    def __init__(self, controller, on_poll, worker=None):
         self.controller = controller
         self.on_poll = on_poll
+        # Web API calls run here, never in an LVGL callback (worker.py).
+        self.worker = worker if worker is not None else Worker()
         self._now_state = {}
         self._selected_artist = None
         self._browse_back_panel = "now"
@@ -273,7 +279,6 @@ class SpotifyUI:
         self._load_more_handler = None
         self._seek_dragging = False
         self._current_panel = "now"
-        self._library_fetch_limit = remote_config.LIBRARY_LIST_LIMIT
         self._search_type = "track"
         self._search_query = None
         self._search_genre_preset = False
@@ -299,6 +304,14 @@ class SpotifyUI:
         self._thumb_jobs = []
         self._thumb_refs = {}
         self._thumb_timer = None
+        self._thumb_gen = {}
+        self._list_tails = {}
+        self._local = None
+        self._progress_base = None  # (progress_ms, ticks_ms) of the last state
+        # What each Now-screen control was last styled as. Restyling one costs
+        # ~30 ms on an ESP32-S3 (LVGL refreshes the style and relayouts), and
+        # every refresh restyled seven of them whether or not anything changed.
+        self._styled = {}
         scr = lv.screen_active()
         self.width, self.height = _screen_size()
         self._build(scr)
@@ -1016,36 +1029,36 @@ class SpotifyUI:
         self._status_is_success = False
         self.set_status(friendly_error(error), kind="error")
 
-    def _run_transport(self, action):
-        try:
-            action()
-            self.on_poll()
-        except Exception as error:
-            self._handle_playback_error(error, pending_action=action)
+    def _net(self, work, after=None, retry=None, poll=True, key=None):
+        """Run network ``work`` on the worker, then ``after()`` and a refresh here.
+
+        On a no-active-device error the device list opens, and ``retry`` (a
+        UI-thread callable that starts the whole operation again) runs once a
+        device is picked.
+        """
+
+        def done(_value, error):
+            if error is not None:
+                self._handle_playback_error(error, pending_action=retry)
+                return
+            if after is not None:
+                after()
+            if poll:
+                self.on_poll()
+
+        self.worker.submit(work, done, key=key)
+
+    def _run_transport(self, action, key=None):
+        self._net(action, retry=lambda: self._run_transport(action, key), key=key)
 
     def _run_async(self, work, on_ok=None, on_err=None, loading_panel=None):
         if loading_panel is not None:
             self._set_panel_loading(loading_panel, True)
 
-        def task(_data):
-            try:
-                result = work()
-            except Exception as exc:
-                lv.async_call(
-                    lambda _d, error=exc: self._async_done(
-                        loading_panel, on_ok, on_err, error=error
-                    ),
-                    None,
-                )
-                return
-            lv.async_call(
-                lambda _d, value=result: self._async_done(
-                    loading_panel, on_ok, on_err, value=value
-                ),
-                None,
-            )
+        def done(value, error):
+            self._async_done(loading_panel, on_ok, on_err, value=value, error=error)
 
-        lv.async_call(task, None)
+        self.worker.submit(work, done)
 
     def _async_done(self, loading_panel, on_ok, on_err, value=None, error=None):
         self._set_panel_loading(loading_panel, False)
@@ -1356,18 +1369,25 @@ class SpotifyUI:
                 self.on_poll()
 
         def run():
-            action(entry) if entry is not None else action()
+            # An action may hand back a UI step (open a picker, reopen a
+            # list); it runs here on the UI thread once the network part is done.
+            return action(entry) if entry is not None else action()
 
-        def pending():
-            run()
+        def done(value, error):
+            if error is not None:
+                self._status_is_success = False
+                self._handle_playback_error(
+                    error,
+                    pending_action=lambda: self._run_action(
+                        action, entry, success_msg, reload, go_now
+                    ),
+                )
+                return
+            if callable(value):
+                value()
             complete_success()
 
-        try:
-            run()
-            complete_success()
-        except Exception as error:
-            self._status_is_success = False
-            self._handle_playback_error(error, pending_action=pending)
+        self.worker.submit(run, done)
 
     def _track_action_specs(self, include_remove=False):
         specs = [
@@ -1430,20 +1450,29 @@ class SpotifyUI:
 
     def _action_add_to_playlist(self, entry):
         if entry.get("uri"):
-            self._open_playlist_picker(entry["uri"], self._restore_after_picker())
+            restore = self._restore_after_picker()
+            return lambda: self._open_playlist_picker(entry["uri"], restore)
+        return None
 
     def _action_remove_from_playlist(self, entry):
         playlist_id = entry.get("context_id") or self._browse_playlist_id
         if playlist_id and entry.get("uri"):
             self.controller.remove_from_playlist(playlist_id, entry["uri"])
             if self._browse_playlist_id:
-                playlist_entry = {
-                    "id": self._browse_playlist_id,
-                    "title": self.browse_title.get_text(),
-                    "uri": None,
-                    "type": "playlist",
-                }
-                self._open_playlist_tracks(playlist_entry, self._browse_back_panel)
+                playlist_id = self._browse_playlist_id
+                back = self._browse_back_panel
+
+                def reopen():
+                    playlist_entry = {
+                        "id": playlist_id,
+                        "title": self.browse_title.get_text(),
+                        "uri": None,
+                        "type": "playlist",
+                    }
+                    self._open_playlist_tracks(playlist_entry, back)
+
+                return reopen
+        return None
 
     def _action_play_album(self, entry):
         self.controller.play_context(entry["uri"], shuffle=False)
@@ -1489,132 +1518,177 @@ class SpotifyUI:
         thumbs=False,
         load_more=None,
         highlight_now=False,
+        append=False,
     ):
-        self._clear_scroll(scroll)
+        tail = self._list_tails.get(id(scroll)) if append else None
+        if tail is None:
+            self._clear_scroll(scroll)
+            start_y = 0
+        else:
+            # Next page: drop the old "Load more" and carry on below the rows.
+            start_y = tail["y"]
+            if tail["more"] is not None:
+                tail["more"].delete()
+        self._list_tails[id(scroll)] = {"y": start_y, "more": None}
         if not entries:
             return
-        y = 0
-        for entry in entries:
-            is_now = entry.get("now_playing") or (
-                highlight_now and self._now_playing_match(entry)
-            )
-            row_actions = actions(entry) if callable(actions) else self._visible_actions(actions, entry)
-            row_h = ROW_HEIGHT
-            if row_actions and len(row_actions) > remote_config.MAX_ROW_ACTIONS:
-                row_h = ROW_HEIGHT * 2 - 8
+        # The first screenful now, the rest a few rows per LVGL tick: a row is
+        # ~55 ms of LVGL calls on an ESP32-S3, so building 30 at once froze
+        # the screen for ~1.8 s. _clear_scroll() bumps the generation, which
+        # stops a build still running for a list being replaced.
+        gen = self._thumb_gen.get(id(scroll), 0)
+        rows = list(entries)
+        state = {"i": 0, "y": start_y, "timer": None}
 
-            row = lv.obj(scroll)
-            row.set_size(self._list_w - 8, row_h)
-            row.align(lv.ALIGN.TOP_MID, 0, y)
-            row.set_style_bg_opa(lv.OPA.TRANSP, 0)
-            row.set_style_border_width(0, 0)
-            row.set_style_pad_all(0, 0)
-            row.remove_flag(lv.obj.FLAG.SCROLLABLE)
-
-            left_pad = 8
-            main_w = self._list_w - 8
-            if thumbs and entry.get("art_url") and image_view.jpeg_scalable():
-                img = lv.image(row)
-                img.set_size(LIST_THUMB, LIST_THUMB)
-                img.align(lv.ALIGN.LEFT_MID, 4, 0)
-                img.set_style_bg_color(_hex(ART_PANEL), 0)
-                img.set_style_bg_opa(lv.OPA.COVER, 0)
-                self._queue_thumb(scroll, img, entry["art_url"])
-                left_pad = LIST_THUMB + THUMB_GAP + 8
-                main_w -= LIST_THUMB + THUMB_GAP
-
-            action_w = 0
-            if row_actions:
-                shown = row_actions[: remote_config.MAX_ROW_ACTIONS]
-                extra = row_actions[remote_config.MAX_ROW_ACTIONS :]
-                if extra:
-                    shown = row_actions[: remote_config.MAX_ROW_ACTIONS - 1] + [
-                        {"text": "...", "handler": lambda e, a=extra: None}
-                    ]
-                action_w = chip_w * len(shown) + CHIP_GAP * len(shown)
-                main_w -= action_w + CHIP_GAP
-
-            if on_primary is not None:
-                main_btn = lv.button(row)
-                main_btn.set_size(max(80, main_w), ROW_HEIGHT)
-                main_btn.align(lv.ALIGN.LEFT_MID, 0, 0)
-                _style_link_button(main_btn, None)
-                text = lv.label(main_btn)
-                text.set_width(max(60, main_w - 16))
-                text.set_long_mode(LABEL_LONG_DOT)
-                label_text = self._entry_label(entry)
-                if is_now:
-                    label_text = "> " + label_text
-                text.set_text(label_text)
-                text.align(lv.ALIGN.LEFT_MID, left_pad - 8, 0)
-                if is_now:
-                    text.set_style_text_color(_hex(ACCENT), lv.PART.MAIN)
-                main_btn.add_event_cb(
-                    lambda event, entry=entry: on_primary(entry),
-                    lv.EVENT.CLICKED,
-                    None,
+        def build(count):
+            while state["i"] < len(rows) and count > 0:
+                state["y"] = self._build_entry_row(
+                    scroll, rows[state["i"]], state["y"], on_primary, actions,
+                    chip_w, thumbs, load_more, highlight_now,
                 )
-            else:
-                text = lv.label(row)
-                text.set_width(max(60, main_w - 8))
-                text.set_long_mode(LABEL_LONG_DOT)
-                label_text = self._entry_label(entry)
-                if is_now:
-                    label_text = "> " + label_text
-                text.set_text(label_text)
-                text.align(lv.ALIGN.LEFT_MID, left_pad, 0)
-                if is_now:
-                    text.set_style_text_color(_hex(ACCENT), 0)
+                state["i"] += 1
+                count -= 1
+            if state["i"] >= len(rows):
+                more = None
+                if load_more:
+                    more = lv.button(scroll)
+                    more.set_size(self._list_w - 8, ROW_HEIGHT)
+                    more.align(lv.ALIGN.TOP_MID, 0, state["y"])
+                    _style_link_button(more, None)
+                    lv.label(more).set_text("Load more")
+                    lv.label(more).center()
+                    more.add_event_cb(lambda event: load_more(), lv.EVENT.CLICKED, None)
+                self._list_tails[id(scroll)] = {"y": state["y"], "more": more}
+                return True
+            return False
 
-            if row_actions:
-                x = self._list_w - 8 - action_w
-                y_chip = (ROW_HEIGHT - CHIP_H) // 2
-                if len(row_actions) > remote_config.MAX_ROW_ACTIONS:
-                    y_chip = 2
-                shown = row_actions[: remote_config.MAX_ROW_ACTIONS]
-                overflow = row_actions[remote_config.MAX_ROW_ACTIONS :]
-                if overflow:
-                    shown = row_actions[: remote_config.MAX_ROW_ACTIONS - 1]
-                for index, action in enumerate(shown):
-                    btn, label = self._row_action_chip(
-                        row,
-                        action["text"],
-                        x,
-                        y_chip,
-                        chip_w,
-                        CHIP_H,
-                        lambda event, entry=entry, handler=action["handler"]: self._run_action(
-                            handler,
-                            entry,
-                            reload=load_more,
-                        ),
-                    )
-                    if action.get("active") and callable(action["active"]):
-                        _style_chip(btn, label, active=action["active"](entry))
-                    x += chip_w + CHIP_GAP
-                if overflow:
-                    btn, label = self._row_action_chip(
-                        row,
-                        "...",
-                        x,
-                        ROW_HEIGHT - CHIP_H - 2,
-                        chip_w,
-                        CHIP_H,
-                        lambda event, entry=entry, extra=overflow: self._show_overflow_actions(
-                            entry, extra, load_more
-                        ),
-                    )
+        def tick(_timer):
+            if self._thumb_gen.get(id(scroll), 0) != gen or build(ROWS_PER_TICK):
+                state["timer"].delete()
+                state["timer"] = None
 
-            y += row_h + ROW_GAP
+        if not build(ROWS_FIRST):
+            state["timer"] = lv.timer_create(tick, 15, None)
 
-        if load_more:
-            btn = lv.button(scroll)
-            btn.set_size(self._list_w - 8, ROW_HEIGHT)
-            btn.align(lv.ALIGN.TOP_MID, 0, y)
-            _style_link_button(btn, None)
-            lv.label(btn).set_text("Load more")
-            lv.label(btn).center()
-            btn.add_event_cb(lambda event: load_more(), lv.EVENT.CLICKED, None)
+    def _row_actions_compact(self):
+        compact = remote_config.COMPACT_ROW_ACTIONS
+        if compact is None:
+            import sys
+
+            compact = sys.platform == "esp32"
+        return compact
+
+    def _build_entry_row(
+        self, scroll, entry, y, on_primary, actions, chip_w, thumbs, load_more, highlight_now
+    ):
+        """One list row at y; returns the y of the next."""
+        is_now = entry.get("now_playing") or (
+            highlight_now and self._now_playing_match(entry)
+        )
+        row_actions = actions(entry) if callable(actions) else self._visible_actions(actions, entry)
+        max_actions = remote_config.MAX_ROW_ACTIONS
+        compact = bool(row_actions) and self._row_actions_compact()
+        if compact:
+            shown = []
+            overflow = list(row_actions)
+        elif row_actions and len(row_actions) > max_actions:
+            # The "..." chip takes the last slot, so the sheet gets every
+            # action from that slot on (it used to drop the one at that index).
+            shown = row_actions[: max_actions - 1]
+            overflow = row_actions[max_actions - 1 :]
+        else:
+            shown = row_actions or []
+            overflow = []
+        row_h = ROW_HEIGHT
+
+        row = lv.obj(scroll)
+        row.set_size(self._list_w - 8, row_h)
+        row.align(lv.ALIGN.TOP_MID, 0, y)
+        row.set_style_bg_opa(lv.OPA.TRANSP, 0)
+        row.set_style_border_width(0, 0)
+        row.set_style_pad_all(0, 0)
+        row.remove_flag(lv.obj.FLAG.SCROLLABLE)
+
+        left_pad = 8
+        main_w = self._list_w - 8
+        if thumbs and entry.get("art_url") and image_view.jpeg_scalable():
+            img = lv.image(row)
+            img.set_size(LIST_THUMB, LIST_THUMB)
+            img.align(lv.ALIGN.LEFT_MID, 4, 0)
+            img.set_style_bg_color(_hex(ART_PANEL), 0)
+            img.set_style_bg_opa(lv.OPA.COVER, 0)
+            self._queue_thumb(scroll, img, entry["art_url"])
+            left_pad = LIST_THUMB + THUMB_GAP + 8
+            main_w -= LIST_THUMB + THUMB_GAP
+
+        chips = len(shown) + (1 if overflow else 0)
+        action_w = chip_w * chips + CHIP_GAP * chips
+        if chips:
+            main_w -= action_w + CHIP_GAP
+
+        label_text = self._entry_label(entry)
+        if is_now:
+            label_text = "> " + label_text
+        if on_primary is not None:
+            main_btn = lv.button(row)
+            main_btn.set_size(max(80, main_w), ROW_HEIGHT)
+            main_btn.align(lv.ALIGN.LEFT_MID, 0, 0)
+            _style_link_button(main_btn, None)
+            text = lv.label(main_btn)
+            text.set_width(max(60, main_w - 16))
+            text.set_long_mode(LABEL_LONG_DOT)
+            text.set_text(label_text)
+            text.align(lv.ALIGN.LEFT_MID, left_pad - 8, 0)
+            if is_now:
+                text.set_style_text_color(_hex(ACCENT), lv.PART.MAIN)
+            main_btn.add_event_cb(
+                lambda event, entry=entry: on_primary(entry),
+                lv.EVENT.CLICKED,
+                None,
+            )
+        else:
+            text = lv.label(row)
+            text.set_width(max(60, main_w - 8))
+            text.set_long_mode(LABEL_LONG_DOT)
+            text.set_text(label_text)
+            text.align(lv.ALIGN.LEFT_MID, left_pad, 0)
+            if is_now:
+                text.set_style_text_color(_hex(ACCENT), 0)
+
+        if chips:
+            x = self._list_w - 8 - action_w
+            y_chip = (ROW_HEIGHT - CHIP_H) // 2
+            for action in shown:
+                btn, label = self._row_action_chip(
+                    row,
+                    action["text"],
+                    x,
+                    y_chip,
+                    chip_w,
+                    CHIP_H,
+                    lambda event, entry=entry, handler=action["handler"]: self._run_action(
+                        handler,
+                        entry,
+                        reload=load_more,
+                    ),
+                )
+                if action.get("active") and callable(action["active"]):
+                    _style_chip(btn, label, active=action["active"](entry))
+                x += chip_w + CHIP_GAP
+            if overflow:
+                self._row_action_chip(
+                    row,
+                    "...",
+                    x,
+                    y_chip,
+                    chip_w,
+                    CHIP_H,
+                    lambda event, entry=entry, extra=overflow: self._show_overflow_actions(
+                        entry, extra, load_more
+                    ),
+                )
+
+        return y + row_h + ROW_GAP
 
     def _row_action_chip(self, parent, text, x, y, width, height, callback):
         btn = lv.button(parent)
@@ -1651,7 +1725,6 @@ class SpotifyUI:
 
     def _show_library(self, title, category):
         self._library_offset = 0
-        self._library_fetch_limit = remote_config.LIBRARY_LIST_LIMIT
         self._library_category = category
         self._set_active_tab("library")
         self._show_panel("library")
@@ -1714,25 +1787,37 @@ class SpotifyUI:
             self._thumb_refs.setdefault(id(scroll), []).append(ref)
 
     def _thumb_tick(self, _timer):
-        # One download per tick keeps the UI responsive while a list fills in.
+        # One download at a time, on the worker, behind anything the user asked for.
+        if self.worker.pending("thumb"):
+            return
         if not self._thumb_jobs:
             self._thumb_timer.delete()
             self._thumb_timer = None
             return
         scroll, img, url = self._thumb_jobs.pop(0)
-        try:
-            path = self.controller.thumb_cache.path_for_url(url)
-        except Exception:
-            return
-        self._show_thumb(scroll, img, path)
+        gen = self._thumb_gen.get(id(scroll), 0)
+
+        def done(path, error):
+            # The list may have been cleared (its images deleted) meanwhile.
+            if error is not None or not path or self._thumb_gen.get(id(scroll), 0) != gen:
+                return
+            self._show_thumb(scroll, img, path)
+
+        self.worker.submit(
+            lambda: self.controller.thumb_cache.path_for_url(url), done, key="thumb"
+        )
 
     def _clear_scroll(self, scroll):
         self._thumb_jobs = [job for job in self._thumb_jobs if job[0] is not scroll]
+        self._thumb_gen[id(scroll)] = self._thumb_gen.get(id(scroll), 0) + 1
+        self._list_tails.pop(id(scroll), None)
         self._thumb_refs.pop(id(scroll), None)
         count = scroll.get_child_count()
         for index in range(count):
             scroll.get_child(0).delete()
-        gc.collect()
+        # No gc.collect() here: a full collection of the 5 MB PSRAM heap is
+        # ~105 ms on an ESP32-S3, paid on every list change. The allocator
+        # collects when it needs to.
 
     def _entry_label(self, entry):
         label = entry["title"]
@@ -2079,26 +2164,18 @@ class SpotifyUI:
         return None
 
     def _play_entry(self, entry):
-        def run():
-            self.controller.play_library_item(entry["uri"], entry["type"])
-            self._show_now(None)
-            self.on_poll()
-
-        try:
-            run()
-        except Exception as error:
-            self._handle_playback_error(error, pending_action=run)
+        self._net(
+            lambda: self.controller.play_library_item(entry["uri"], entry["type"]),
+            after=lambda: self._show_now(None),
+            retry=lambda: self._play_entry(entry),
+        )
 
     def _on_browse_track_selected(self, entry):
-        def run():
-            self.controller.play_library_item(entry["uri"], "track")
-            self._show_now(None)
-            self.on_poll()
-
-        try:
-            run()
-        except Exception as error:
-            self._handle_playback_error(error, pending_action=run)
+        self._net(
+            lambda: self.controller.play_library_item(entry["uri"], "track"),
+            after=lambda: self._show_now(None),
+            retry=lambda: self._on_browse_track_selected(entry),
+        )
 
     def _on_browse_album_selected(self, entry):
         self._open_album_tracks(entry["id"], entry["title"], self._browse_back_panel)
@@ -2140,11 +2217,9 @@ class SpotifyUI:
         state = self._now_state
         if state.get("item_type") != "track" or not state.get("item_id"):
             return
-        try:
-            self.controller.toggle_save_track(state["item_id"], bool(state.get("saved")))
-            self.on_poll()
-        except Exception as error:
-            self.set_status(str(error))
+        item_id = state["item_id"]
+        saved = bool(state.get("saved"))
+        self._net(lambda: self.controller.toggle_save_track(item_id, saved))
 
     def _on_add_to_playlist(self, _event):
         uri = self._now_state.get("item_uri")
@@ -2157,11 +2232,8 @@ class SpotifyUI:
         album_id = state.get("album_id")
         if not album_id:
             return
-        try:
-            self.controller.toggle_save_album(album_id, bool(state.get("album_saved")))
-            self.on_poll()
-        except Exception as error:
-            self.set_status(str(error))
+        saved = bool(state.get("album_saved"))
+        self._net(lambda: self.controller.toggle_save_album(album_id, saved))
 
     def _on_artist_name_click(self, _event):
         artists = self._now_state.get("artists") or ()
@@ -2200,19 +2272,115 @@ class SpotifyUI:
         followed = artist.get("followed")
         if followed is None:
             followed = False
-        try:
-            self.controller.toggle_follow_artist(artist["id"], bool(followed))
+        artist_id = artist["id"]
+        self._net(lambda: self.controller.toggle_follow_artist(artist_id, bool(followed)))
+
+    # ---- this process's own speaker ---------------------------------------
+    # When the local earful speaker is the active device, the controls go to
+    # it directly and the screen reads its state: no Web API round trip, so a
+    # tap acts at once. The Web API still fills in what earful does not know
+    # (ids, saved flags), in the background.
+
+    def attach_local_speaker(self, speaker):
+        self._local = speaker
+        lv.timer_create(self._local_tick, 500, None)
+
+    def _local_device(self):
+        local = self._local
+        if local is None:
+            return None
+        device = local.device
+        if device.playing or self._now_state.get("device") == local.name:
+            return device
+        return None
+
+    def _style_play(self, playing):
+        def apply():
+            _style_transport_primary(self.play_btn, self.play_btn.get_height(), playing=playing)
+            self.play_label.set_text(lv.SYMBOL.PAUSE if playing else lv.SYMBOL.PLAY)
+            self.play_label.set_style_text_color(_hex(TEXT), 0)
+
+        self._restyle("play", playing, apply)
+
+    def _show_playing(self, playing):
+        self._now_state["playing"] = playing
+        self._style_play(playing)
+        if self._progress_base is not None:
+            # Restart interpolation from where the bar is now.
+            self._progress_base = (self._shown_progress(), time.ticks_ms())
+
+    def _render_progress(self, progress, duration):
+        if self._seek_dragging:
+            return
+        if self._seek_hold_until:
+            if time.ticks_diff(self._seek_hold_until, time.ticks_ms()) >= 0:
+                return
+            self._seek_hold_until = 0
+        if duration > 0:
+            self.progress.set_value(int(min(progress, duration) * 1000 / duration), ANIM_OFF)
+        else:
+            self.progress.set_value(0, ANIM_OFF)
+        self.time_label.set_text("{} / {}".format(_fmt_ms(progress), _fmt_ms(duration)))
+
+    def _shown_progress(self):
+        base = self._progress_base
+        if base is None:
+            return self._now_state.get("progress_ms") or 0
+        progress, at = base
+        if self._now_state.get("playing"):
+            progress += time.ticks_diff(time.ticks_ms(), at)
+        duration = self._now_state.get("duration_ms") or 0
+        return min(progress, duration) if duration else progress
+
+    def _local_tick(self, _timer):
+        device = self._local_device()
+        if device is None:
+            # Another device: move the bar between polls instead of jumping.
+            if self._now_state.get("playing") and self._progress_base is not None:
+                self._render_progress(self._shown_progress(), self._now_state.get("duration_ms") or 0)
+            return
+        uri = device.track
+        if uri and uri != self._now_state.get("item_uri"):
+            self._now_state["item_uri"] = uri
+            self.track_label.set_text(device.title or "")
+            self.artist_label.set_text(device.artist or "")
+            self.album_label.set_text(device.album or "")
             self.on_poll()
-        except Exception as error:
-            self.set_status(friendly_error(error), kind="error")
+        duration = device.duration or 0
+        position = device.position or 0
+        self._now_state["duration_ms"] = duration
+        self._progress_base = (position, time.ticks_ms())
+        self._render_progress(position, duration)
+        playing = bool(device.playing)
+        if playing != bool(self._now_state.get("playing")):
+            self._show_playing(playing)
 
     def _on_prev(self, _event):
+        device = self._local_device()
+        if device is not None:
+            device.prev()
+            return
         self._run_transport(self.controller.previous_track)
 
     def _on_play_pause(self, _event):
-        self._run_transport(self.controller.play_pause)
+        device = self._local_device()
+        if device is not None:
+            playing = bool(device.playing)
+            if playing:
+                device.pause()
+            else:
+                device.play()
+            self._show_playing(not playing)
+            return
+        play = not self._now_state.get("playing")
+        self._show_playing(play)  # at once; the next refresh corrects it
+        self._run_transport(lambda: self.controller.set_playing(play))
 
     def _on_next(self, _event):
+        device = self._local_device()
+        if device is not None:
+            device.next()
+            return
         self._run_transport(self.controller.next_track)
 
     def _on_shuffle(self, _event):
@@ -2222,10 +2390,12 @@ class SpotifyUI:
         self._run_transport(self.controller.cycle_repeat)
 
     def _on_seek_back(self, _event):
-        self._run_transport(lambda: self.controller.seek_relative(-15000))
+        self._seek_to(max(0, self._shown_progress() - 15000))
 
     def _on_seek_fwd(self, _event):
-        self._run_transport(lambda: self.controller.seek_relative(15000))
+        duration = self._now_state.get("duration_ms") or 0
+        target = self._shown_progress() + 15000
+        self._seek_to(min(target, duration) if duration else target)
 
     def load_devices(self):
         def work():
@@ -2543,16 +2713,22 @@ class SpotifyUI:
             if not self._now_state.get("duration_ms"):
                 return
             position_ms = self._progress_position_ms()
+            self._seek_to(position_ms)
 
-            def action():
-                self.controller.seek_absolute(position_ms)
-                self._seek_hold_until = time.ticks_add(time.ticks_ms(), 3500)
-                self.on_poll()
-
-            try:
-                action()
-            except Exception as error:
-                self._handle_playback_error(error, pending_action=action)
+    def _seek_to(self, position_ms):
+        self._progress_base = (position_ms, time.ticks_ms())
+        self._render_progress(position_ms, self._now_state.get("duration_ms") or 0)
+        device = self._local_device()
+        if device is not None:
+            device.seek(int(position_ms))
+            return
+        # Hold the slider where it was dropped until a refresh catches up.
+        self._seek_hold_until = time.ticks_add(time.ticks_ms(), 3500)
+        self._net(
+            lambda: self.controller.seek_absolute(position_ms),
+            retry=lambda: self._seek_to(position_ms),
+            key="seek",
+        )
 
     def _on_volume_slider(self, event):
         if event.get_code() != lv.EVENT.RELEASED:
@@ -2561,9 +2737,15 @@ class SpotifyUI:
             return
         value = self.volume_slider.get_value()
         self._last_volume = int(value)
+        device = self._local_device()
+        if device is not None:
+            device.volume = int(value)
+            return
         self._volume_slider_busy = True
         try:
-            self._run_transport(lambda: self.controller.change_volume_absolute(value))
+            self._run_transport(
+                lambda: self.controller.change_volume_absolute(value), key="volume"
+            )
         finally:
             self._volume_slider_busy = False
 
@@ -2621,35 +2803,47 @@ class SpotifyUI:
         self._volume_hide_timer = None
         self._hide_volume_popup()
 
-    def load_library(self, title, category):
+    def _library_page(self, category):
+        if category == "albums":
+            # Each saved album carries its whole track list: ~11 KB apiece.
+            return remote_config.LIBRARY_ALBUMS_LIMIT
+        return remote_config.LIBRARY_LIST_LIMIT
+
+    def load_library(self, title, category, offset=0):
+        """Show a library category; offset > 0 appends the next page."""
         self.library_title.set_text(title)
         self._style_library_hub()
+        page = self._library_page(category)
 
         def work():
-            return self.controller.library_entries(
-                category, limit=self._library_fetch_limit
-            )
+            return self.controller.library_entries(category, limit=page, offset=offset)
 
         def on_ok(entries):
-            if not entries:
+            if self._library_category != category:
+                return  # the user moved on to another category meanwhile
+            if not entries and offset == 0:
                 self._show_empty_state(
                     self.library_scroll,
                     "No {} in your library".format(title.lower()),
                 )
                 return
             load_more = None
-            if len(entries) >= self._library_fetch_limit:
-                load_more = lambda: self._load_more_library(title, category)
-            self._render_library_entries(category, entries, load_more)
+            if len(entries) >= page:
+                next_offset = offset + len(entries)
+                load_more = lambda: self.load_library(title, category, next_offset)
+            self._render_library_entries(category, entries, load_more, append=offset > 0)
 
         def on_err(error):
             self.set_status(friendly_error(error), kind="error")
 
         self._run_async(work, on_ok=on_ok, on_err=on_err, loading_panel=self.library_panel)
 
-    def _render_library_entries(self, category, entries, load_more):
+    def _render_library_entries(self, category, entries, load_more, append=False):
+        def populate(*args, **kwargs):
+            self._populate_entry_scroll(*args, append=append, **kwargs)
+
         if category == "tracks":
-            self._populate_entry_scroll(
+            populate(
                 self.library_scroll,
                 entries,
                 on_primary=lambda entry: self._run_action(
@@ -2663,7 +2857,7 @@ class SpotifyUI:
                 highlight_now=True,
             )
         elif category == "albums":
-            self._populate_entry_scroll(
+            populate(
                 self.library_scroll,
                 entries,
                 on_primary=lambda entry: self._on_library_selected(entry, category),
@@ -2678,7 +2872,7 @@ class SpotifyUI:
                 load_more=load_more,
             )
         elif category == "artists":
-            self._populate_entry_scroll(
+            populate(
                 self.library_scroll,
                 entries,
                 on_primary=lambda entry: self._on_library_selected(entry, category),
@@ -2693,7 +2887,7 @@ class SpotifyUI:
                 load_more=load_more,
             )
         elif category == "playlists":
-            self._populate_entry_scroll(
+            populate(
                 self.library_scroll,
                 entries,
                 on_primary=lambda entry: self._on_library_selected(entry, category),
@@ -2704,7 +2898,7 @@ class SpotifyUI:
                 load_more=load_more,
             )
         elif category == "episodes":
-            self._populate_entry_scroll(
+            populate(
                 self.library_scroll,
                 entries,
                 on_primary=lambda entry: self._run_action(
@@ -2717,7 +2911,7 @@ class SpotifyUI:
                 thumbs=True,
             )
         elif category == "shows":
-            self._populate_entry_scroll(
+            populate(
                 self.library_scroll,
                 entries,
                 on_primary=lambda entry: self._on_library_selected(entry, category),
@@ -2726,7 +2920,7 @@ class SpotifyUI:
                 thumbs=True,
             )
         elif category == "audiobooks":
-            self._populate_entry_scroll(
+            populate(
                 self.library_scroll,
                 entries,
                 on_primary=lambda entry: self._run_action(
@@ -2739,32 +2933,26 @@ class SpotifyUI:
                 thumbs=True,
             )
 
-    def _load_more_library(self, title, category):
-        self._library_fetch_limit += remote_config.LIBRARY_LIST_LIMIT
-        self.controller._library_cache.pop(category, None)
-        self.load_library(title, category)
-
     def _on_library_track_selected(self, entry):
-        def run():
-            self.controller.play_library_item(entry["uri"], "track")
-            self._show_now(None)
-            self.on_poll()
-
-        try:
-            run()
-        except Exception as error:
-            self._handle_playback_error(error, pending_action=run)
+        self._net(
+            lambda: self.controller.play_library_item(entry["uri"], "track"),
+            after=lambda: self._show_now(None),
+            retry=lambda: self._on_library_track_selected(entry),
+        )
 
     def _on_library_like(self, entry):
         track_id = entry.get("id")
         if not track_id:
             return
-        try:
+        def work():
             saved = self.controller.track_is_saved(track_id)
             self.controller.toggle_save_track(track_id, saved)
-            self.load_library(LIBRARY_TAB_TITLES["tracks"], "tracks")
-        except Exception as error:
-            self.set_status(str(error))
+
+        self._net(
+            work,
+            after=lambda: self.load_library(LIBRARY_TAB_TITLES["tracks"], "tracks"),
+            poll=False,
+        )
 
     def _on_library_add_playlist(self, entry):
         if entry.get("uri"):
@@ -2788,17 +2976,25 @@ class SpotifyUI:
             self.set_status(str(error))
 
     def _on_device_selected(self, device_id):
-        try:
-            pending = self._pending_after_device
-            self._pending_after_device = None
-            self.controller.transfer_device(device_id, play=(pending is None))
+        pending = self._pending_after_device
+        self._pending_after_device = None
+        self.set_status("Switching device...")
+
+        def done(_value, error):
+            if error is not None:
+                self.set_status(friendly_error(error), kind="error")
+                return
             self.set_status("")
+            self._show_now(None)
             if pending:
                 pending()
-            self._show_now(None)
-            self.on_poll()
-        except Exception as error:
-            self.set_status(friendly_error(error), kind="error")
+            else:
+                self.on_poll()
+
+        self.worker.submit(
+            lambda: self.controller.transfer_device(device_id, play=(pending is None)),
+            done,
+        )
 
     def set_user(self, name):
         self.user_label.set_text(name or "Spotify")
@@ -2852,6 +3048,12 @@ class SpotifyUI:
             else:
                 btn.add_flag(flag)
 
+    def _restyle(self, name, value, apply):
+        if self._styled.get(name) == value:
+            return
+        self._styled[name] = value
+        apply()
+
     def _update_now_actions(self, state):
         item_type = state.get("item_type")
         is_track = item_type == "track"
@@ -2864,7 +3066,8 @@ class SpotifyUI:
         if is_track:
             self.like_btn.remove_flag(lv.obj.FLAG.HIDDEN)
             self.playlist_add_btn.remove_flag(lv.obj.FLAG.HIDDEN)
-            _style_chip(self.like_btn, self.like_label, active=bool(state.get("saved")))
+            saved = bool(state.get("saved"))
+            self._restyle("like", saved, lambda: _style_chip(self.like_btn, self.like_label, active=saved))
         elif is_episode:
             self.like_btn.add_flag(lv.obj.FLAG.HIDDEN)
             self.playlist_add_btn.add_flag(lv.obj.FLAG.HIDDEN)
@@ -2877,10 +3080,11 @@ class SpotifyUI:
             self.artist_follow_btn.remove_flag(lv.obj.FLAG.HIDDEN)
             active_artist = self._active_artist()
             if active_artist:
-                _style_chip(
-                    self.artist_follow_btn,
-                    self.artist_follow_label,
-                    active=bool(active_artist.get("followed")),
+                followed = bool(active_artist.get("followed"))
+                self._restyle(
+                    "follow",
+                    followed,
+                    lambda: _style_chip(self.artist_follow_btn, self.artist_follow_label, active=followed),
                 )
         else:
             self.artist_albums_btn.add_flag(lv.obj.FLAG.HIDDEN)
@@ -2888,16 +3092,24 @@ class SpotifyUI:
 
         if has_album:
             self.album_save_btn.remove_flag(lv.obj.FLAG.HIDDEN)
-            _style_chip(
-                self.album_save_btn,
-                self.album_save_label,
-                active=bool(state.get("album_saved")),
+            album_saved = bool(state.get("album_saved"))
+            self._restyle(
+                "album_save",
+                album_saved,
+                lambda: _style_chip(self.album_save_btn, self.album_save_label, active=album_saved),
             )
         else:
             self.album_save_btn.add_flag(lv.obj.FLAG.HIDDEN)
 
     def update_now_playing(self, state):
+        device = self._local_device()
+        if device is not None and state.get("device") == self._local.name:
+            # The Web API lags what the speaker itself knows.
+            state["playing"] = bool(device.playing)
+            state["progress_ms"] = device.position or state.get("progress_ms") or 0
+            state["duration_ms"] = device.duration or state.get("duration_ms") or 0
         self._now_state = state
+        self._progress_base = (state.get("progress_ms") or 0, time.ticks_ms())
         if state.get("item_id") != getattr(self, "_last_item_id", None):
             self._selected_artist = None
             self._last_item_id = state.get("item_id")
@@ -2940,11 +3152,7 @@ class SpotifyUI:
                 "{} / {}".format(_fmt_ms(progress), _fmt_ms(duration))
             )
 
-        playing = state["playing"]
-        play_size = self.play_btn.get_height()
-        _style_transport_primary(self.play_btn, play_size, playing=playing)
-        self.play_label.set_text(lv.SYMBOL.PAUSE if playing else lv.SYMBOL.PLAY)
-        self.play_label.set_style_text_color(_hex(TEXT), 0)
+        self._style_play(bool(state["playing"]))
 
         if not self._device_startup_checked:
             self._device_startup_checked = True
@@ -2953,17 +3161,21 @@ class SpotifyUI:
 
     def _update_aux_controls(self, state):
         shuffle = bool(state.get("shuffle"))
-        _style_chip(self.shuffle_btn, self.shuffle_label, active=shuffle)
+        self._restyle(
+            "shuffle", shuffle, lambda: _style_chip(self.shuffle_btn, self.shuffle_label, active=shuffle)
+        )
 
         repeat = state.get("repeat") or "off"
-        if repeat == "track":
-            self.repeat_label.set_text("1")
-        else:
-            self.repeat_label.set_text(lv.SYMBOL.LOOP)
-        _style_chip(self.repeat_btn, self.repeat_label, active=repeat != "off")
+
+        def style_repeat():
+            self.repeat_label.set_text("1" if repeat == "track" else lv.SYMBOL.LOOP)
+            _style_chip(self.repeat_btn, self.repeat_label, active=repeat != "off")
+
+        self._restyle("repeat", repeat, style_repeat)
 
         volume = state.get("volume")
-        if volume is not None and not self._volume_slider_busy:
+        if volume is not None and not self._volume_slider_busy and int(volume) != self._styled.get("volume"):
+            self._styled["volume"] = int(volume)
             self._last_volume = int(volume)
             self.volume_slider.set_value(self._last_volume, ANIM_OFF)
 

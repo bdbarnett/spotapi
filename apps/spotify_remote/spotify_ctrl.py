@@ -949,6 +949,18 @@ class SpotifyController:
                 smallest_larger_width = width
         return best_fit or smallest_larger
 
+    def set_playing(self, play):
+        """Resume or pause, when the caller already knows which it wants.
+
+        play_pause() asks the Web API for the state first; a UI that shows the
+        state saves that round trip.
+        """
+        self.ensure_active_device()
+        if play:
+            self.client.play()
+        else:
+            self.client.pause()
+
     def play_pause(self):
         state = self.refresh_now_playing()
         self.ensure_active_device(state)
@@ -1050,29 +1062,31 @@ class SpotifyController:
             getattr(item, "id", None),
         )
 
-    def library_entries(self, category, limit=None):
+    def library_entries(self, category, limit=None, offset=0):
         fetch_limit = limit if limit is not None else self._library_limit
-        if limit is None and category in self._library_cache:
+        if limit is None and offset == 0 and category in self._library_cache:
             return self._library_cache[category]
 
         if category == "tracks":
-            entries = self.library_tracks(limit=fetch_limit)
+            entries = self.library_tracks(limit=fetch_limit, offset=offset)
         elif category == "albums":
-            entries = self.library_albums(limit=fetch_limit)
+            entries = self.library_albums(limit=fetch_limit, offset=offset)
         elif category == "artists":
-            entries = self.library_artists(limit=fetch_limit)
+            # Followed artists page by cursor, not offset: fetch through this
+            # page and keep its end.
+            entries = self.library_artists(limit=min(50, offset + fetch_limit))[offset:]
         elif category == "playlists":
-            entries = self.library_playlists(limit=fetch_limit)
+            entries = self.library_playlists(limit=fetch_limit, offset=offset)
         elif category == "episodes":
-            entries = self.library_episodes(limit=fetch_limit)
+            entries = self.library_episodes(limit=fetch_limit, offset=offset)
         elif category == "shows":
-            entries = self.library_shows(limit=fetch_limit)
+            entries = self.library_shows(limit=fetch_limit, offset=offset)
         elif category == "audiobooks":
-            entries = self.library_audiobooks(limit=fetch_limit)
+            entries = self.library_audiobooks(limit=fetch_limit, offset=offset)
         else:
             entries = ()
 
-        if limit is None:
+        if limit is None and offset == 0:
             self._library_cache[category] = entries
         return entries
 

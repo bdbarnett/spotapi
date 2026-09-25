@@ -1,6 +1,5 @@
 # multimer types: queued, sync
 # pyscript skip: gallery
-import gc
 import os
 import sys
 
@@ -12,12 +11,17 @@ def _parent(path):
 
 # Run from anywhere: the spotify_remote package lives in apps/, and the spotapi
 # package at the repo root, two levels above this file.
+# Only from a source tree: frozen into firmware, or installed on a board, the
+# packages are already importable, and the entries this would add ("/", "//.")
+# made every later import search the root three times (~185 ms each on an
+# ESP32-S3).
 _APPS_DIR = _parent(_parent(__file__))
 if not _APPS_DIR.startswith("/") and ":" not in _APPS_DIR:
     _APPS_DIR = os.getcwd().replace("\\", "/") + "/" + _APPS_DIR
-for _path in (_parent(_APPS_DIR), _APPS_DIR):
-    if _path not in sys.path:
-        sys.path.insert(0, _path)
+if _APPS_DIR.rstrip("/").endswith("/apps"):
+    for _path in (_parent(_APPS_DIR), _APPS_DIR):
+        if _path not in sys.path:
+            sys.path.insert(0, _path)
 
 from displaydev import env_set  # NOQA
 
@@ -48,20 +52,33 @@ from spotify_remote import config as remote_config  # NOQA
 from spotify_remote import local_speaker  # NOQA
 
 
-def _schedule_poll(ui, controller):
-    lv.async_call(lambda _data: poll(ui, controller), None)
-
-
 def poll(ui, controller):
-    try:
-        ui.update_now_playing(controller.refresh_now_playing())
-        ui.clear_success_status()
-    except Exception as error:
-        ui._status_is_success = False
-        ui.set_status(friendly_error(error), kind="error")
-    finally:
-        gc.collect()
+    """Refresh now-playing on the worker; the screen updates when it lands."""
 
+    def done(state, error):
+        if error is not None:
+            ui._status_is_success = False
+            ui.set_status(friendly_error(error), kind="error")
+            return
+        ui.update_now_playing(state)
+        ui.clear_success_status()
+
+    # Keyed: a refresh already waiting is replaced, never queued twice.
+    ui.worker.submit(controller.refresh_now_playing, done, key="poll")
+
+
+# A remote and a speaker must not doze: MicroPython's STA default is modem
+# sleep, which holds downstream data until the next beacon. On the LCD-7 that
+# made a 325 KB library page take 55 s instead of 15, and earful's audio
+# chunks crawl (2026-09-25).
+if sys.platform == "esp32":
+    try:
+        import network
+
+        _sta = network.WLAN(network.STA_IF)
+        _sta.config(pm=_sta.PM_NONE)
+    except (ImportError, AttributeError, OSError, ValueError):
+        pass
 
 controller = SpotifyController()
 ui = SpotifyUI(controller, on_poll=lambda: poll(ui, controller))
@@ -75,6 +92,8 @@ speaker = (
     if _speaker_name
     else None
 )
+if speaker is not None:
+    ui.attach_local_speaker(speaker)
 
 try:
     me = controller.me()
@@ -91,7 +110,8 @@ except Exception as error:
 
 
 def _poll_timer(_timer):
-    _schedule_poll(ui, controller)
+    if not ui.worker.pending("poll"):
+        poll(ui, controller)
 
 
 lv.timer_create(_poll_timer, 5000, None)
