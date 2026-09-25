@@ -137,11 +137,13 @@ def _build_chip_off(st):
     st.set_bg_color(_hex(SURFACE))
     st.set_border_width(1)
     st.set_border_color(_hex(BORDER))
+    st.set_text_color(_hex(TEXT))
 
 
 def _build_chip_on(st):
     st.set_bg_color(_hex(ACCENT))
     st.set_border_width(0)
+    st.set_text_color(_hex(BG))
 
 
 def _build_bg(color):
@@ -170,6 +172,7 @@ _STYLE_BUILDERS = {
     "chip_on": _build_chip_on,
     "chip_off_pressed": _build_bg(SURFACE_PRESSED),
     "chip_on_pressed": _build_bg(ACCENT_PRESSED),
+    "chip_muted": _build_text(MUTED),
     "text": _build_text(TEXT),
     "text_muted": _build_text(MUTED),
     "text_on_accent": _build_text(BG),
@@ -219,32 +222,34 @@ def _style_transport_primary(btn, size, playing=False):
     btn.set_style_bg_color(_hex(pressed), lv.PART.MAIN | lv.STATE.PRESSED)
 
 
-_CHIP_STYLES = ("base", "chip", "chip_on", "chip_off")
-_CHIP_PRESSED_STYLES = ("chip_on_pressed", "chip_off_pressed")
-_TEXT_STYLES = ("text", "text_muted", "text_on_accent")
-
-
 def _style_chip(btn, label, active=False, muted=False, fresh=False):
-    """Style a chip and its label. fresh: the widget has no chip styles yet
-    (just created), so there is nothing to remove first."""
-    pressed = _pressed()
-    if not fresh:
-        for name in _CHIP_STYLES:
-            btn.remove_style(_style(name), lv.PART.MAIN)
-        for name in _CHIP_PRESSED_STYLES:
-            btn.remove_style(_style(name), pressed)
-        for name in _TEXT_STYLES:
-            label.remove_style(_style(name), lv.PART.MAIN)
-    btn.add_style(_style("base"), lv.PART.MAIN)
-    btn.add_style(_style("chip"), lv.PART.MAIN)
+    """Style a chip; its label takes the text colour from it.
+
+    The chip's styles go on once, the active look under LV_STATE_CHECKED, so
+    switching between active and inactive is one state change. Swapping
+    styles instead (remove_style / add_style, a full style refresh each) cost
+    ~80 ms a chip on the LCD-7: restyling the library hub's seven chips on
+    every category tap was a ~600 ms stall. muted: grey text while inactive
+    (the nav tabs). fresh: kept for callers; the USER_1 flag marks a chip whose
+    styles are already on.
+    """
+    flag = lv.obj.FLAG.USER_1
+    if not btn.has_flag(flag):
+        main = lv.PART.MAIN
+        checked = main | lv.STATE.CHECKED
+        btn.add_style(_style("base"), main)
+        btn.add_style(_style("chip"), main)
+        btn.add_style(_style("chip_off"), main)
+        if muted:
+            btn.add_style(_style("chip_muted"), main)
+        btn.add_style(_style("chip_off_pressed"), _pressed())
+        btn.add_style(_style("chip_on"), checked)
+        btn.add_style(_style("chip_on_pressed"), checked | lv.STATE.PRESSED)
+        btn.add_flag(flag)
     if active:
-        btn.add_style(_style("chip_on"), lv.PART.MAIN)
-        btn.add_style(_style("chip_on_pressed"), pressed)
-        label.add_style(_style("text_on_accent"), lv.PART.MAIN)
+        btn.add_state(lv.STATE.CHECKED)
     else:
-        btn.add_style(_style("chip_off"), lv.PART.MAIN)
-        btn.add_style(_style("chip_off_pressed"), pressed)
-        label.add_style(_style("text_muted" if muted else "text"), lv.PART.MAIN)
+        btn.remove_state(lv.STATE.CHECKED)
 
 
 def _style_chip_local(btn, label, active=False):
@@ -266,7 +271,7 @@ def _style_chip_local(btn, label, active=False):
 
 
 def _style_nav_button(btn, label, active=False, fresh=False):
-    _style_chip(btn, label, active=active, muted=not active, fresh=fresh)
+    _style_chip(btn, label, active=active, muted=True, fresh=fresh)
 
 
 def _style_link_button(btn, label):
