@@ -14,6 +14,8 @@ import time
 
 import lvgl as lv
 
+from spotify_remote import gil
+
 import sys
 
 try:
@@ -32,7 +34,6 @@ if sys.implementation.name == "micropython" and sys.platform != "esp32":
 # connection has to be reopened, and 12 KB overflowed into the heap on the
 # LCD-7 (tlsf_malloc panic, 2026-09-25).
 STACK_BYTES = 20 * 1024
-
 
 class Worker:
     def __init__(self, threaded=True):
@@ -134,6 +135,7 @@ class Worker:
             self._release()
 
     def _loop(self):
+        gil.set_worker_thread()
         # One step below the UI thread, where the firmware lets us: at equal
         # priority the GIL never passes back to the UI while this computes.
         try:

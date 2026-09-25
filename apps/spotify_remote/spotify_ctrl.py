@@ -23,6 +23,7 @@ from spotapi.transport import TransportError
 from spotify_remote import artwork_cache
 from spotify_remote import config as remote_config
 from spotify_remote import genre_seeds
+from spotify_remote import gil
 
 SCOPES = (
     USER_PROFILE_SCOPES
@@ -1222,6 +1223,8 @@ class SpotifyController:
         art_url=None,
         now_playing=None,
     ):
+        # Every list entry passes here: let the UI thread in between them.
+        gil.cooperate()
         entry = {
             "title": title or "Untitled",
             "subtitle": subtitle or "",
