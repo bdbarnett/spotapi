@@ -1,5 +1,21 @@
 API_BASE_URL = "https://api.spotify.com/v1"
 
+# Resolved once here, never inside a function. On MicroPython json is an
+# extensible built-in, so every `import json` searches the filesystem first,
+# and a failing `from urllib.parse import ...` searches all of sys.path: on
+# an ESP32-S3 each cost ~185 ms, several per API call (2026-09-25).
+try:
+    import json as _json
+except ImportError:  # pragma: no cover
+    _json = None
+
+try:
+    from urllib.parse import quote as _urllib_quote
+    from urllib.parse import unquote as _urllib_unquote
+except ImportError:
+    _urllib_quote = None
+    _urllib_unquote = None
+
 
 class TransportError(Exception):
     def __init__(self, message, status=None, data=None):
@@ -9,6 +25,18 @@ class TransportError(Exception):
 
 
 def _find_requests():
+    import sys
+
+    # MicroPython's requests does a TLS handshake per request; keep the
+    # connection open instead (see keepalive.py).
+    if sys.implementation.name == "micropython":
+        try:
+            from .keepalive import Session
+
+            return Session()
+        except ImportError:
+            pass
+
     try:
         import requests
 
@@ -278,24 +306,20 @@ def close_response(response):
 
 
 def json_loads(data):
-    try:
-        import json
-    except ImportError:
+    if _json is None:
         raise TransportError("No JSON parser is available on this Python runtime")
 
     if not isinstance(data, str):
         data = data.decode("utf-8")
 
-    return json.loads(data)
+    return _json.loads(data)
 
 
 def json_dumps(data):
-    try:
-        import json
-    except ImportError:
+    if _json is None:
         raise TransportError("No JSON serializer is available on this Python runtime")
 
-    return json.dumps(data)
+    return _json.dumps(data)
 
 
 def build_url(path_or_url, query=None, base_url=API_BASE_URL):
@@ -325,21 +349,17 @@ def query_string(query):
 def quote(value):
     value = str(value)
 
-    try:
-        from urllib.parse import quote as urllib_quote
-        return urllib_quote(value, safe="")
-    except ImportError:
-        return simple_quote(value)
+    if _urllib_quote is not None:
+        return _urllib_quote(value, safe="")
+    return simple_quote(value)
 
 
 def unquote_plus(value):
     value = value.replace("+", " ")
 
-    try:
-        from urllib.parse import unquote as urllib_unquote
-        return urllib_unquote(value)
-    except ImportError:
-        return simple_unquote(value)
+    if _urllib_unquote is not None:
+        return _urllib_unquote(value)
+    return simple_unquote(value)
 
 
 def simple_quote(value):
